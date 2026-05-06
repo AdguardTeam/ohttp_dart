@@ -1,0 +1,18 @@
+name: ohttp_dart
+description: Pure Dart OHTTP client (RFC 9458) with HPKE (RFC 9180) and BHTTP (RFC 9292).
+version: 0.1.0
+publish_to: none
+homepage: https://github.com/AdguardTeam/ohttp_dart
+repository: https://github.com/AdguardTeam/ohttp_dart
+issue_tracker: https://github.com/AdguardTeam/ohttp_dart/issues
+
+environment:
+  sdk: ^3.11.1
+
+dependencies:
+  cryptography: ^2.9.0
+  http: ^1.6.0
+
+dev_dependencies:
+  lints: ^3.0.0
+  test: ^1.25.6
