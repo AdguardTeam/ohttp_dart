@@ -1,12 +1,16 @@
 /// Pure Dart OHTTP client (RFC 9458).
 ///
-/// Provides Oblivious HTTP encapsulation/decapsulation with:
+/// Core library providing:
+/// - OHTTP encapsulation / decapsulation (RFC 9458)
 /// - HPKE Base Mode Sender (RFC 9180)
 /// - Binary HTTP serialization (RFC 9292)
-/// - High-level OhttpClient for gateway communication
+/// - Transport abstraction and session orchestration
 library;
 
 export 'src/bhttp.dart';
 export 'src/hpke.dart';
+export 'src/key_config_cache.dart';
 export 'src/ohttp.dart';
-export 'src/ohttp_client.dart';
+export 'src/ohttp_data.dart';
+export 'src/ohttp_session.dart';
+export 'src/transport.dart';
