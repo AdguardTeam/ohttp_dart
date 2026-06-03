@@ -60,6 +60,7 @@ Uint8List encodeVarint(int value) {
       for (var i = 1; i <= 7; i++) {
         value = (value << 8) | data[offset + i];
       }
+
       return (value, 8);
     default:
       throw StateError('unreachable');
@@ -76,7 +77,7 @@ Uint8List serializeRequest({
   required String scheme,
   required String authority,
   required String path,
-  required Map<String, String> headers,
+  required List<(String, String)> headers,
   required Uint8List body,
 }) {
   final buf = BytesBuilder();
@@ -92,9 +93,9 @@ Uint8List serializeRequest({
 
   // Header section (known-length)
   final headerBuf = BytesBuilder();
-  for (final entry in headers.entries) {
-    _writeField(headerBuf, utf8.encode(entry.key.toLowerCase()));
-    _writeField(headerBuf, utf8.encode(entry.value));
+  for (final (name, value) in headers) {
+    _writeField(headerBuf, utf8.encode(name.toLowerCase()));
+    _writeField(headerBuf, utf8.encode(value));
   }
   final headerBytes = headerBuf.toBytes();
   buf.add(encodeVarint(headerBytes.length));
@@ -102,7 +103,9 @@ Uint8List serializeRequest({
 
   // Content (known-length)
   buf.add(encodeVarint(body.length));
-  if (body.isNotEmpty) buf.add(body);
+  if (body.isNotEmpty) {
+    buf.add(body);
+  }
 
   // Trailers (empty)
   buf.add(encodeVarint(0));
@@ -120,6 +123,7 @@ void _writeField(BytesBuilder buf, List<int> data) {
 // ---------------------------------------------------------------------------
 
 /// A parsed BHTTP response.
+// ignore: prefer-match-file-name
 class BhttpResponse {
   final int statusCode;
   final List<(String, String)> headers;

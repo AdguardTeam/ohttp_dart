@@ -11,6 +11,7 @@ Uint8List _hex(String hex) {
   for (var i = 0; i < hex.length; i += 2) {
     bytes.add(int.parse(hex.substring(i, i + 2), radix: 16));
   }
+
   return Uint8List.fromList(bytes);
 }
 
@@ -30,7 +31,7 @@ void main() {
       final bobPk = _hex(
         'de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f',
       );
-      final expectedShared = '4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742';
+      const expectedShared = '4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742';
 
       final x = X25519();
       final kp = SimpleKeyPairData(
@@ -62,22 +63,22 @@ void main() {
     );
     final info = _hex('4f6465206f6e2061204772656369616e2055726e');
 
-    final expectedKey = '4531685d41d65f03dc48f6b8302c05b0';
-    final expectedBaseNonce = '56d890e5accaaf011cff4b7d';
-    final expectedExporterSecret = '45ff1c2e220db587171952c0592d5f5ebe103f1561a2614e38f2ffd47e99e3f8';
+    const expectedKey = '4531685d41d65f03dc48f6b8302c05b0';
+    const expectedBaseNonce = '56d890e5accaaf011cff4b7d';
+    const expectedExporterSecret = '45ff1c2e220db587171952c0592d5f5ebe103f1561a2614e38f2ffd47e99e3f8';
 
     // Encryption test vector (seq=0)
     final sealPlaintext = _hex(
       '4265617574792069732074727574682c20747275746820626561757479',
     );
     final sealAad = _hex('436f756e742d30');
-    final expectedCiphertext =
+    const expectedCiphertext =
         'f938558b5d72f1a23810b4be2ab4f84331acc02fc97babc53a52ae8218a355a96d8770ac83d07bea87e13c512a';
 
     // Export test vector
     final exportContext = _hex('00');
     const exportLength = 32;
-    final expectedExportValue = '2e8f0b54673c7029649d4eb9d5e33bf1872cf76d623ff164ac185da9e88c21a5';
+    const expectedExportValue = '2e8f0b54673c7029649d4eb9d5e33bf1872cf76d623ff164ac185da9e88c21a5';
 
     test(
       'SetupBaseS produces correct key, base_nonce, exporter_secret',
@@ -136,7 +137,7 @@ void main() {
     });
 
     test('shared_secret intermediate value matches RFC', () async {
-      final expectedSharedSecret = 'fe0e18c9f024ce43799ae393c7e8fe8fce9d218875e8227b0187c04e7d2ea1fc';
+      const expectedSharedSecret = 'fe0e18c9f024ce43799ae393c7e8fe8fce9d218875e8227b0187c04e7d2ea1fc';
 
       final x = X25519();
       final testKeyPair = SimpleKeyPairData(
@@ -247,8 +248,8 @@ void main() {
       final salt = _hex('000102030405060708090a0b0c');
       final info = _hex('f0f1f2f3f4f5f6f7f8f9');
 
-      final expectedPrk = '077709362c2e32df0ddc3f0dc47bba6390b6c73bb50f9c3122ec844ad7c2b3e5';
-      final expectedOkm = '3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865';
+      const expectedPrk = '077709362c2e32df0ddc3f0dc47bba6390b6c73bb50f9c3122ec844ad7c2b3e5';
+      const expectedOkm = '3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865';
 
       final prk = await HpkeSender.hkdfExtract(salt, ikm);
       expect(_toHex(prk), expectedPrk);

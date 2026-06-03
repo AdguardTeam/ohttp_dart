@@ -9,6 +9,7 @@ import 'package:cryptography/cryptography.dart';
 ///   AEAD = AES-128-GCM (0x0001)
 ///
 /// Implements only the sender side needed for OHTTP client.
+// ignore: prefer-match-file-name
 class HpkeSender {
   static const int kemId = 0x0020;
   static const int kdfId = 0x0001;
@@ -64,6 +65,42 @@ class HpkeSender {
     );
   }
 
+  // -- Raw HKDF operations (RFC 5869) --
+
+  /// HKDF-Extract(salt, ikm) = HMAC-SHA256(key=salt, data=ikm)
+  static Future<Uint8List> hkdfExtract(Uint8List salt, Uint8List ikm) async {
+    final effectiveSalt = salt.isEmpty ? Uint8List(32) : salt;
+    final mac = await _hmac.calculateMac(
+      ikm,
+      secretKey: SecretKeyData(effectiveSalt),
+    );
+
+    return Uint8List.fromList(mac.bytes);
+  }
+
+  /// HKDF-Expand(prk, info, length)
+  static Future<Uint8List> hkdfExpand(
+    Uint8List prk,
+    Uint8List info,
+    int length,
+  ) async {
+    final hashLen = 32; // SHA-256
+    final n = (length + hashLen - 1) ~/ hashLen;
+    var t = Uint8List(0);
+    final okm = BytesBuilder();
+    for (var i = 1; i <= n; i++) {
+      final input = Uint8List.fromList([...t, ...info, i]);
+      final mac = await _hmac.calculateMac(
+        input,
+        secretKey: SecretKeyData(prk),
+      );
+      t = Uint8List.fromList(mac.bytes);
+      okm.add(t);
+    }
+
+    return Uint8List.sublistView(Uint8List.fromList(okm.toBytes()), 0, length);
+  }
+
   // -- KEM Encap (RFC 9180 §4.1) --
 
   static Future<(Uint8List sharedSecret, Uint8List enc)> _kemEncap(
@@ -113,6 +150,7 @@ class HpkeSender {
       utf8.encode('eae_prk'),
       dh,
     );
+
     return _labeledExpand(
       _kemSuiteId,
       prk,
@@ -189,13 +227,14 @@ class HpkeSender {
     Uint8List salt,
     List<int> label,
     Uint8List ikm,
-  ) async {
+  ) {
     final labeledIkm = Uint8List.fromList([
       ...utf8.encode('HPKE-v1'),
       ...suiteId,
       ...label,
       ...ikm,
     ]);
+
     return hkdfExtract(salt, labeledIkm);
   }
 
@@ -207,7 +246,7 @@ class HpkeSender {
     List<int> label,
     Uint8List info,
     int length,
-  ) async {
+  ) {
     final labeledInfo = Uint8List.fromList([
       (length >> 8) & 0xFF,
       length & 0xFF,
@@ -216,41 +255,8 @@ class HpkeSender {
       ...label,
       ...info,
     ]);
+
     return hkdfExpand(prk, labeledInfo, length);
-  }
-
-  // -- Raw HKDF operations (RFC 5869) --
-
-  /// HKDF-Extract(salt, ikm) = HMAC-SHA256(key=salt, data=ikm)
-  static Future<Uint8List> hkdfExtract(Uint8List salt, Uint8List ikm) async {
-    final effectiveSalt = salt.isEmpty ? Uint8List(32) : salt;
-    final mac = await _hmac.calculateMac(
-      ikm,
-      secretKey: SecretKeyData(effectiveSalt),
-    );
-    return Uint8List.fromList(mac.bytes);
-  }
-
-  /// HKDF-Expand(prk, info, length)
-  static Future<Uint8List> hkdfExpand(
-    Uint8List prk,
-    Uint8List info,
-    int length,
-  ) async {
-    final hashLen = 32; // SHA-256
-    final n = (length + hashLen - 1) ~/ hashLen;
-    var t = Uint8List(0);
-    final okm = BytesBuilder();
-    for (var i = 1; i <= n; i++) {
-      final input = Uint8List.fromList([...t, ...info, i]);
-      final mac = await _hmac.calculateMac(
-        input,
-        secretKey: SecretKeyData(prk),
-      );
-      t = Uint8List.fromList(mac.bytes);
-      okm.add(t);
-    }
-    return Uint8List.sublistView(Uint8List.fromList(okm.toBytes()), 0, length);
   }
 }
 
@@ -260,7 +266,6 @@ class HpkeSenderContext {
   final Uint8List key;
   final Uint8List baseNonce;
   final Uint8List exporterSecret;
-  int _seq = 0;
 
   HpkeSenderContext._({
     required this.enc,
@@ -268,6 +273,35 @@ class HpkeSenderContext {
     required this.baseNonce,
     required this.exporterSecret,
   });
+
+  int _seq = 0;
+
+  /// Seal (encrypt) a plaintext with AAD.
+  /// Returns ciphertext || 16-byte auth tag.
+  /// Each call increments the internal sequence counter (RFC 9180 §5.2).
+  Future<Uint8List> seal(Uint8List aad, Uint8List plaintext) async {
+    final nonce = _computeNonce();
+    final secretBox = await HpkeSender._aesGcm.encrypt(
+      plaintext,
+      secretKey: SecretKeyData(key),
+      nonce: nonce,
+      aad: aad,
+    );
+
+    return Uint8List.fromList([
+      ...secretBox.cipherText,
+      ...secretBox.mac.bytes,
+    ]);
+  }
+
+  /// Export a secret from this HPKE context (RFC 9180 §5.3).
+  Future<Uint8List> export(Uint8List exporterContext, int length) => HpkeSender._labeledExpand(
+    HpkeSender._hpkeSuiteId,
+    exporterSecret,
+    utf8.encode('sec'),
+    exporterContext,
+    length,
+  );
 
   /// Computes nonce = base_nonce XOR I2OSP(seq, Nn) and increments seq.
   /// Matches BouncyCastle AEAD.computeNonce() (RFC 9180 §5.2).
@@ -282,32 +316,7 @@ class HpkeSenderContext {
     nonce[nonce.length - 2] ^= (s >> 8) & 0xFF;
     nonce[nonce.length - 3] ^= (s >> 16) & 0xFF;
     nonce[nonce.length - 4] ^= (s >> 24) & 0xFF;
+
     return nonce;
   }
-
-  /// Seal (encrypt) a plaintext with AAD.
-  /// Returns ciphertext || 16-byte auth tag.
-  /// Each call increments the internal sequence counter (RFC 9180 §5.2).
-  Future<Uint8List> seal(Uint8List aad, Uint8List plaintext) async {
-    final nonce = _computeNonce();
-    final secretBox = await HpkeSender._aesGcm.encrypt(
-      plaintext,
-      secretKey: SecretKeyData(key),
-      nonce: nonce,
-      aad: aad,
-    );
-    return Uint8List.fromList([
-      ...secretBox.cipherText,
-      ...secretBox.mac.bytes,
-    ]);
-  }
-
-  /// Export a secret from this HPKE context (RFC 9180 §5.3).
-  Future<Uint8List> export(Uint8List exporterContext, int length) async => HpkeSender._labeledExpand(
-    HpkeSender._hpkeSuiteId,
-    exporterSecret,
-    utf8.encode('sec'),
-    exporterContext,
-    length,
-  );
 }

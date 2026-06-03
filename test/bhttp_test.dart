@@ -75,7 +75,7 @@ void main() {
         scheme: 'https',
         authority: 'example.com',
         path: '/test',
-        headers: {},
+        headers: [],
         body: Uint8List(0),
       );
 
@@ -97,7 +97,7 @@ void main() {
         scheme: 'https',
         authority: 'example.com',
         path: '/post',
-        headers: {'content-type': 'text/plain'},
+        headers: [('content-type', 'text/plain')],
         body: Uint8List.fromList(body),
       );
 
@@ -111,7 +111,7 @@ void main() {
         scheme: 'https',
         authority: 'example.com',
         path: '/',
-        headers: {'Content-Type': 'text/plain'},
+        headers: [('Content-Type', 'text/plain')],
         body: Uint8List(0),
       );
 
@@ -193,7 +193,7 @@ void main() {
         scheme: 'https',
         authority: 'example.com',
         path: '/get',
-        headers: {'accept': 'application/json'},
+        headers: [('accept', 'application/json')],
         body: Uint8List(0),
       );
 
