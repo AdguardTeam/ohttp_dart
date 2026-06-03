@@ -44,15 +44,6 @@ class HttpClientTransport implements OhttpTransport {
     }
   }
 
-  void _validateHttpsScheme(Uri uri, String parameterName) {
-    if (uri.scheme != 'https') {
-      throw OhttpConfigException(
-        '$parameterName must use HTTPS scheme per RFC 9458 §1. '
-        'Got scheme: "${uri.scheme}"',
-      );
-    }
-  }
-
   @override
   Future<Uint8List> fetchKeyConfig() async {
     final response = await _client.get(_keysUrl);
@@ -85,5 +76,14 @@ class HttpClientTransport implements OhttpTransport {
     }
 
     return response.bodyBytes;
+  }
+
+  void _validateHttpsScheme(Uri uri, String parameterName) {
+    if (uri.scheme != 'https') {
+      throw OhttpConfigException(
+        '$parameterName must use HTTPS scheme per RFC 9458 §1. '
+        'Got scheme: "${uri.scheme}"',
+      );
+    }
   }
 }
