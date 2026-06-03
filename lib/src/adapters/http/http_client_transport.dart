@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:ohttp_dart/src/exceptions.dart';
-import 'package:ohttp_dart/src/transport.dart';
+import 'package:ohttp_dart/src/ohttp_transport.dart';
 
 /// An [OhttpTransport] that delegates HTTP calls to an injected [http.Client].
 ///

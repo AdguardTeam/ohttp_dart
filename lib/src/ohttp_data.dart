@@ -8,6 +8,7 @@ import 'dart:typed_data';
 /// Headers stored as a list to preserve insertion order and duplicate
 /// names (e.g. Set-Cookie). Collapsing to a map is deferred to adapters
 /// that require it.
+// ignore: prefer-match-file-name
 class OhttpRequestData {
   final String method;
   final String scheme;
@@ -37,8 +38,8 @@ class OhttpResponseData {
   final Uint8List body;
 
   OhttpResponseData({
+    required this.body,
     required this.statusCode,
     this.headers = const [],
-    required this.body,
   });
 }

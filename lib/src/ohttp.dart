@@ -14,6 +14,7 @@ import 'hpke.dart';
 /// Format (41 bytes for our cipher suite):
 ///   key_id (1) || kem_id (2 BE) || public_key (32) ||
 ///   symmetric_algorithms_length (2 BE) || kdf_id (2 BE) || aead_id (2 BE)
+// ignore: prefer-match-file-name
 class OhttpKeyConfig {
   final int keyId;
   final int kemId;
@@ -241,6 +242,7 @@ Uint8List _buildHpkeInfo(OhttpKeyConfig config) {
   buf.addByte(config.kdfId & 0xFF);
   buf.addByte((config.aeadId >> 8) & 0xFF);
   buf.addByte(config.aeadId & 0xFF);
+
   return buf.toBytes();
 }
 

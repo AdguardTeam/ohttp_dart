@@ -60,6 +60,7 @@ Uint8List encodeVarint(int value) {
       for (var i = 1; i <= 7; i++) {
         value = (value << 8) | data[offset + i];
       }
+
       return (value, 8);
     default:
       throw StateError('unreachable');
@@ -102,7 +103,9 @@ Uint8List serializeRequest({
 
   // Content (known-length)
   buf.add(encodeVarint(body.length));
-  if (body.isNotEmpty) buf.add(body);
+  if (body.isNotEmpty) {
+    buf.add(body);
+  }
 
   // Trailers (empty)
   buf.add(encodeVarint(0));
@@ -120,6 +123,7 @@ void _writeField(BytesBuilder buf, List<int> data) {
 // ---------------------------------------------------------------------------
 
 /// A parsed BHTTP response.
+// ignore: prefer-match-file-name
 class BhttpResponse {
   final int statusCode;
   final List<(String, String)> headers;

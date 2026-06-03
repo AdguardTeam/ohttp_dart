@@ -8,18 +8,20 @@ import 'test_utils.dart';
 /// Fake transport that records calls and can be instructed to succeed or fail.
 class _FakeTransport implements OhttpTransport {
   final Uint8List config;
+  _FakeTransport([Uint8List? config]) : config = config ?? validKeyConfig();
+
   int fetchCount = 0;
   int postCount = 0;
+
   Uint8List? lastPostBody;
 
   /// When set, [postToGateway] throws this instead of succeeding.
   Object? postError;
 
-  _FakeTransport([Uint8List? config]) : config = config ?? validKeyConfig();
-
   @override
   Future<Uint8List> fetchKeyConfig() async {
     fetchCount++;
+
     return config;
   }
 
@@ -27,7 +29,10 @@ class _FakeTransport implements OhttpTransport {
   Future<Uint8List> postToGateway(Uint8List body) async {
     postCount++;
     lastPostBody = body;
-    if (postError != null) throw postError!;
+    if (postError != null) {
+      throw postError!;
+    }
+
     // Return arbitrary bytes; the caller is expected to handle decap failure.
     return Uint8List(64);
   }

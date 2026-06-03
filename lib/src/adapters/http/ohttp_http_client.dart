@@ -21,6 +21,7 @@ import 'package:ohttp_dart/src/ohttp_session.dart';
 class OhttpHttpClient extends BaseClient {
   static const _defaultHttpPort = 80;
   static const _defaultHttpsPort = 443;
+  static const _hostHeader = 'host';
 
   final OhttpSession _session;
   final Client? _closeWith;
@@ -44,13 +45,13 @@ class OhttpHttpClient extends BaseClient {
 
       // `dart:io` injects `host` at the transport layer, which the encrypted
       // inner request never reaches. Fall back to the URL when it is missing.
-      if (name.toLowerCase() == 'host') {
+      if (name.toLowerCase() == _hostHeader) {
         hasHost = true;
       }
     });
 
     if (!hasHost) {
-      headers.add(('host', host));
+      headers.add((_hostHeader, host));
     }
 
     final body = await request.finalize().toBytes();

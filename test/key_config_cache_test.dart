@@ -8,15 +8,19 @@ import 'test_utils.dart';
 /// Fake transport that returns a config and counts fetch calls.
 class _FakeTransport implements OhttpTransport {
   final Uint8List config;
-  int fetchCount = 0;
-  Object? fetchError;
-
   _FakeTransport([Uint8List? config]) : config = config ?? validKeyConfig();
+
+  int fetchCount = 0;
+
+  Object? fetchError;
 
   @override
   Future<Uint8List> fetchKeyConfig() async {
     fetchCount++;
-    if (fetchError != null) throw fetchError!;
+    if (fetchError != null) {
+      throw fetchError!;
+    }
+
     return config;
   }
 
