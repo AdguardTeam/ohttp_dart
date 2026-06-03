@@ -1,6 +1,6 @@
+// ignore_for_file: public_member_api_docs
+
 /// Base exception class for all OHTTP library errors.
-///
-/// This provides a common type for catching any OHTTP-related exception
 // ignore: prefer-match-file-name
 abstract class OhttpException implements Exception {
   final String message;
