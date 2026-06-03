@@ -10,23 +10,25 @@ import '../test_utils.dart';
 
 MockClient _mockClient(
   String url, {
-  int statusCode = 200,
   Uint8List? body,
+  int statusCode = 200,
 }) => MockClient((request) async {
   if (request.url.toString() == url) {
     return Response.bytes(body ?? Uint8List(0), statusCode);
   }
+
   return Response('Not found', 404);
 });
 
 /// Fake session that captures the [OhttpRequestData] for inspection.
 class _FakeSession implements OhttpSession {
-  OhttpRequestData? lastRequest;
   final OhttpResponseData _response = OhttpResponseData(statusCode: 200, body: Uint8List(0));
+  OhttpRequestData? lastRequest;
 
   @override
   Future<OhttpResponseData> send(OhttpRequestData request) async {
     lastRequest = request;
+
     return _response;
   }
 }
@@ -67,6 +69,7 @@ void main() {
       final client = MockClient((request) async {
         expect(request.headers['content-type'], 'message/ohttp-req');
         expect(request.bodyBytes, body);
+
         return Response.bytes(Uint8List(4), 200);
       });
 
@@ -178,7 +181,7 @@ void main() {
       expect(hostHeader!.$2, 'example.com:8443');
     });
 
-    test('closeWith propagates close', () async {
+    test('closeWith propagates close', () {
       final raw = _mockClient(keysUrl);
       final transport = HttpClientTransport(
         client: raw,

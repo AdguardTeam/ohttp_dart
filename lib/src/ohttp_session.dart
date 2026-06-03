@@ -4,7 +4,7 @@ import 'bhttp.dart' as bhttp;
 import 'key_config_cache.dart';
 import 'ohttp.dart';
 import 'ohttp_data.dart';
-import 'transport.dart';
+import 'ohttp_transport.dart';
 
 /// Orchestrates a complete OHTTP request-response round trip.
 ///

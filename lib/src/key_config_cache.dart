@@ -1,5 +1,5 @@
 import 'ohttp.dart';
-import 'transport.dart';
+import 'ohttp_transport.dart';
 
 /// A time-to-live cache for the gateway's parsed [OhttpKeyConfig].
 ///
@@ -18,17 +18,18 @@ class KeyConfigCache {
   final Duration _ttl;
   final DateTime Function() _now;
 
-  OhttpKeyConfig? _cached;
-  DateTime _expiresAt = DateTime.fromMillisecondsSinceEpoch(0);
-  Future<OhttpKeyConfig>? _pendingFetch;
-
   KeyConfigCache({
     required OhttpTransport transport,
-    Duration ttl = _defaultTtl,
     DateTime Function()? now,
+    Duration ttl = _defaultTtl,
   }) : _transport = transport,
        _ttl = ttl,
        _now = now ?? (() => DateTime.now());
+
+  DateTime _expiresAt = DateTime.fromMillisecondsSinceEpoch(0);
+  OhttpKeyConfig? _cached;
+
+  Future<OhttpKeyConfig>? _pendingFetch;
 
   /// Returns the parsed [OhttpKeyConfig], reusing a cached value while it
   /// is within the TTL. When the cache is cold or stale, a new fetch is

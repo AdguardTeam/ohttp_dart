@@ -13,4 +13,4 @@ export 'src/key_config_cache.dart';
 export 'src/ohttp.dart';
 export 'src/ohttp_data.dart';
 export 'src/ohttp_session.dart';
-export 'src/transport.dart';
+export 'src/ohttp_transport.dart';
