@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:http/http.dart';
 
 import 'package:ohttp_dart/src/ohttp_data.dart';
@@ -61,7 +59,7 @@ class OhttpHttpClient extends BaseClient {
       method: request.method,
       scheme: url.scheme,
       authority: host,
-      path: url.path.isEmpty ? '/' : url.path,
+      path: _buildPath(url),
       headers: headers,
       body: body,
     );
@@ -89,9 +87,19 @@ class OhttpHttpClient extends BaseClient {
     if (url.hasPort && !_isDefaultPort(url.scheme, url.port)) {
       return '${url.host}:${url.port}';
     }
+
     return url.host;
   }
 
   bool _isDefaultPort(String scheme, int port) =>
       (scheme == 'http' && port == _defaultHttpPort) || (scheme == 'https' && port == _defaultHttpsPort);
+
+  String _buildPath(Uri url) {
+    final path = url.path.isEmpty ? '/' : url.path;
+    if (url.hasQuery) {
+      return '$path?${url.query}';
+    }
+
+    return path;
+  }
 }
