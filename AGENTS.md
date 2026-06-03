@@ -175,7 +175,6 @@ Write or update tests when:
 
 ### Documentation
 
-- **Public APIs**: All public members must have doc comments (`public_member_api_docs: true`)
 - **RFC references**: Cite RFC section numbers in comments for protocol-specific code
 - **Test vectors**: Document RFC test vector sources in test files
 
