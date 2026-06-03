@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:ohttp_dart/src/transport.dart';
@@ -34,6 +33,7 @@ class HttpClientTransport implements OhttpTransport {
         message: 'Failed to fetch KeyConfig from $_keysUrl',
       );
     }
+
     return response.bodyBytes;
   }
 
@@ -41,15 +41,19 @@ class HttpClientTransport implements OhttpTransport {
   Future<Uint8List> postToGateway(Uint8List body) async {
     final response = await _client.post(
       _gatewayUrl,
-      headers: {HttpHeaders.contentTypeHeader: _ohttpMediaType},
+      headers: {
+        'content-type': _ohttpMediaType,
+      },
       body: body,
     );
+
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw OhttpGatewayException(
         statusCode: response.statusCode,
         message: 'Failed to POST to Gateway $_gatewayUrl',
       );
     }
+
     return response.bodyBytes;
   }
 }

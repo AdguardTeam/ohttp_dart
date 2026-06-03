@@ -43,7 +43,7 @@ class OhttpSession {
       scheme: request.scheme,
       authority: request.authority,
       path: request.path,
-      headers: Map.fromEntries(request.headers.map((h) => MapEntry(h.$1, h.$2))),
+      headers: request.headers,
       body: request.body,
     );
 

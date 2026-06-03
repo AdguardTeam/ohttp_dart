@@ -76,7 +76,7 @@ Uint8List serializeRequest({
   required String scheme,
   required String authority,
   required String path,
-  required Map<String, String> headers,
+  required List<(String, String)> headers,
   required Uint8List body,
 }) {
   final buf = BytesBuilder();
@@ -92,9 +92,9 @@ Uint8List serializeRequest({
 
   // Header section (known-length)
   final headerBuf = BytesBuilder();
-  for (final entry in headers.entries) {
-    _writeField(headerBuf, utf8.encode(entry.key.toLowerCase()));
-    _writeField(headerBuf, utf8.encode(entry.value));
+  for (final (name, value) in headers) {
+    _writeField(headerBuf, utf8.encode(name.toLowerCase()));
+    _writeField(headerBuf, utf8.encode(value));
   }
   final headerBytes = headerBuf.toBytes();
   buf.add(encodeVarint(headerBytes.length));
