@@ -16,13 +16,42 @@ class HttpClientTransport implements OhttpTransport {
   final Uri _keysUrl;
   final Uri _gatewayUrl;
 
+  /// Creates an HTTP client transport for OHTTP.
+  ///
+  /// Throws [OhttpConfigException] if [keysUrl] or [gatewayUrl] do not use
+  /// the HTTPS scheme, unless [testOnlyAllowInsecureScheme] is set to `true`.
+  ///
+  /// ## Security Warning
+  ///
+  /// Per [RFC 9458 §1](https://www.rfc-editor.org/rfc/rfc9458#section-1),
+  /// the connection between the client and the relay/gateway MUST be protected
+  /// with TLS. Only HTTPS URLs are accepted by default.
+  ///
+  /// The [testOnlyAllowInsecureScheme] flag bypasses this check and is intended
+  /// **exclusively for testing scenarios** (e.g., MockClient with http://localhost).
+  /// Production code MUST NOT set this flag to `true`.
   HttpClientTransport({
     required http.Client client,
     required Uri keysUrl,
     required Uri gatewayUrl,
+    bool testOnlyAllowInsecureScheme = false,
   }) : _client = client,
        _keysUrl = keysUrl,
-       _gatewayUrl = gatewayUrl;
+       _gatewayUrl = gatewayUrl {
+    if (!testOnlyAllowInsecureScheme) {
+      _validateHttpsScheme(keysUrl, 'keysUrl');
+      _validateHttpsScheme(gatewayUrl, 'gatewayUrl');
+    }
+  }
+
+  void _validateHttpsScheme(Uri uri, String parameterName) {
+    if (uri.scheme != 'https') {
+      throw OhttpConfigException(
+        '$parameterName must use HTTPS scheme per RFC 9458 §1. '
+        'Got scheme: "${uri.scheme}"',
+      );
+    }
+  }
 
   @override
   Future<Uint8List> fetchKeyConfig() async {
