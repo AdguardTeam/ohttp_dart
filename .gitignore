@@ -10,6 +10,8 @@ pubspec.lock
 .claude/
 .github/
 
+.fvmrc
 .fvm/
+
 .idea/
 .vscode/
