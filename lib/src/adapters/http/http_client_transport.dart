@@ -1,5 +1,7 @@
 import 'dart:typed_data';
+
 import 'package:http/http.dart' as http;
+import 'package:meta/meta.dart';
 import 'package:ohttp_dart/src/exceptions.dart';
 import 'package:ohttp_dart/src/ohttp_transport.dart';
 
@@ -19,30 +21,36 @@ class HttpClientTransport implements OhttpTransport {
   /// Creates an HTTP client transport for OHTTP.
   ///
   /// Throws [OhttpConfigException] if [keysUrl] or [gatewayUrl] do not use
-  /// the HTTPS scheme, unless [testOnlyAllowInsecureScheme] is set to `true`.
+  /// the HTTPS scheme.
   ///
   /// ## Security Warning
   ///
   /// Per [RFC 9458 §1](https://www.rfc-editor.org/rfc/rfc9458#section-1),
   /// the connection between the client and the relay/gateway MUST be protected
-  /// with TLS. Only HTTPS URLs are accepted by default.
-  ///
-  /// The [testOnlyAllowInsecureScheme] flag bypasses this check and is intended
-  /// **exclusively for testing scenarios** (e.g., MockClient with http://localhost).
-  /// Production code MUST NOT set this flag to `true`.
+  /// with TLS. Only HTTPS URLs are accepted.
   HttpClientTransport({
     required http.Client client,
     required Uri keysUrl,
     required Uri gatewayUrl,
-    bool testOnlyAllowInsecureScheme = false,
   }) : _client = client,
        _keysUrl = keysUrl,
        _gatewayUrl = gatewayUrl {
-    if (!testOnlyAllowInsecureScheme) {
-      _validateHttpsScheme(keysUrl, 'keysUrl');
-      _validateHttpsScheme(gatewayUrl, 'gatewayUrl');
-    }
+    _validateHttpsScheme(keysUrl, 'keysUrl');
+    _validateHttpsScheme(gatewayUrl, 'gatewayUrl');
   }
+
+  /// Creates an HTTP client transport without HTTPS scheme validation.
+  ///
+  /// This constructor is intended **exclusively for testing scenarios**
+  /// (e.g., MockClient with http://localhost). Production code MUST NOT use it.
+  @visibleForTesting
+  HttpClientTransport.insecureForTesting({
+    required http.Client client,
+    required Uri keysUrl,
+    required Uri gatewayUrl,
+  }) : _client = client,
+       _keysUrl = keysUrl,
+       _gatewayUrl = gatewayUrl;
 
   @override
   Future<Uint8List> fetchKeyConfig() async {

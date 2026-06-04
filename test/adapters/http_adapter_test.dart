@@ -103,15 +103,14 @@ void main() {
       );
     });
 
-    test('allows http with testOnlyAllowInsecureScheme flag', () {
+    test('allows http with insecureForTesting constructor', () {
       final client = MockClient((request) async => Response.bytes(Uint8List(0), 200));
 
       expect(
-        () => HttpClientTransport(
+        () => HttpClientTransport.insecureForTesting(
           client: client,
           keysUrl: Uri.parse('http://localhost/ohttp/config'),
           gatewayUrl: Uri.parse('http://localhost/ohttp/gateway'),
-          testOnlyAllowInsecureScheme: true,
         ),
         returnsNormally,
       );
@@ -124,11 +123,10 @@ void main() {
 
     test('fetchKeyConfig returns bytes on 200', () async {
       final client = _mockClient(keysUrl, body: validKeyConfig());
-      final transport = HttpClientTransport(
+      final transport = HttpClientTransport.insecureForTesting(
         client: client,
         keysUrl: Uri.parse(keysUrl),
         gatewayUrl: Uri.parse(gatewayUrl),
-        testOnlyAllowInsecureScheme: true,
       );
 
       final result = await transport.fetchKeyConfig();
@@ -137,11 +135,10 @@ void main() {
 
     test('fetchKeyConfig throws OhttpGatewayException on non-2xx', () async {
       final client = _mockClient(keysUrl, statusCode: 500);
-      final transport = HttpClientTransport(
+      final transport = HttpClientTransport.insecureForTesting(
         client: client,
         keysUrl: Uri.parse(keysUrl),
         gatewayUrl: Uri.parse(gatewayUrl),
-        testOnlyAllowInsecureScheme: true,
       );
 
       await expectLater(
@@ -159,11 +156,10 @@ void main() {
         return Response.bytes(Uint8List(4), 200);
       });
 
-      final transport = HttpClientTransport(
+      final transport = HttpClientTransport.insecureForTesting(
         client: client,
         keysUrl: Uri.parse(keysUrl),
         gatewayUrl: Uri.parse(gatewayUrl),
-        testOnlyAllowInsecureScheme: true,
       );
 
       await transport.postToGateway(body);
@@ -171,11 +167,10 @@ void main() {
 
     test('postToGateway throws OhttpGatewayException on non-2xx', () async {
       final client = _mockClient(gatewayUrl, statusCode: 502);
-      final transport = HttpClientTransport(
+      final transport = HttpClientTransport.insecureForTesting(
         client: client,
         keysUrl: Uri.parse(keysUrl),
         gatewayUrl: Uri.parse(gatewayUrl),
-        testOnlyAllowInsecureScheme: true,
       );
 
       await expectLater(
@@ -273,11 +268,10 @@ void main() {
       const localKeysUrl = 'http://localhost/ohttp/config';
       const localGatewayUrl = 'http://localhost/ohttp/gateway';
       final raw = _mockClient(localKeysUrl);
-      final transport = HttpClientTransport(
+      final transport = HttpClientTransport.insecureForTesting(
         client: raw,
         keysUrl: Uri.parse(localKeysUrl),
         gatewayUrl: Uri.parse(localGatewayUrl),
-        testOnlyAllowInsecureScheme: true,
       );
       final session = OhttpSession.withTransport(transport: transport);
       final client = OhttpHttpClient(session: session, closeWith: raw);
