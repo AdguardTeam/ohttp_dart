@@ -105,4 +105,102 @@ void main() {
       expect(transport.lastPostBody!.isNotEmpty, isTrue);
     });
   });
+
+  group('OhttpRequestData authority validation', () {
+    test('accepts valid host', () {
+      expect(
+        () => OhttpRequestData(
+          method: 'GET',
+          scheme: 'https',
+          authority: 'host.example.com',
+          path: '/',
+        ),
+        returnsNormally,
+      );
+    });
+
+    test('accepts host with port', () {
+      expect(
+        () => OhttpRequestData(
+          method: 'GET',
+          scheme: 'https',
+          authority: 'host.example.com:8443',
+          path: '/',
+        ),
+        returnsNormally,
+      );
+    });
+
+    test('rejects empty authority', () {
+      expect(
+        () => OhttpRequestData(
+          method: 'GET',
+          scheme: 'https',
+          authority: '',
+          path: '/',
+        ),
+        throwsA(isA<OhttpConfigException>()),
+      );
+    });
+
+    test('rejects authority with scheme prefix', () {
+      expect(
+        () => OhttpRequestData(
+          method: 'GET',
+          scheme: 'https',
+          authority: 'https://host.example.com',
+          path: '/',
+        ),
+        throwsA(isA<OhttpConfigException>()),
+      );
+    });
+
+    test('rejects authority with space', () {
+      expect(
+        () => OhttpRequestData(
+          method: 'GET',
+          scheme: 'https',
+          authority: 'host.example.com /path',
+          path: '/',
+        ),
+        throwsA(isA<OhttpConfigException>()),
+      );
+    });
+
+    test('rejects authority with path', () {
+      expect(
+        () => OhttpRequestData(
+          method: 'GET',
+          scheme: 'https',
+          authority: 'host.example.com/path',
+          path: '/',
+        ),
+        throwsA(isA<OhttpConfigException>()),
+      );
+    });
+
+    test('rejects authority with query', () {
+      expect(
+        () => OhttpRequestData(
+          method: 'GET',
+          scheme: 'https',
+          authority: 'host.example.com?q=1',
+          path: '/',
+        ),
+        throwsA(isA<OhttpConfigException>()),
+      );
+    });
+
+    test('rejects authority with fragment', () {
+      expect(
+        () => OhttpRequestData(
+          method: 'GET',
+          scheme: 'https',
+          authority: 'host.example.com#frag',
+          path: '/',
+        ),
+        throwsA(isA<OhttpConfigException>()),
+      );
+    });
+  });
 }
