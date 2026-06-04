@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 
+import 'exceptions.dart';
+
 /// HPKE Base Mode Sender (RFC 9180) for the cipher suite:
 ///   KEM = DHKEM(X25519, HKDF-SHA256) (0x0020)
 ///   KDF = HKDF-SHA256 (0x0001)
@@ -75,12 +77,16 @@ class HpkeSender {
   /// HKDF-Extract(salt, ikm) = HMAC-SHA256(key=salt, data=ikm)
   static Future<Uint8List> hkdfExtract(Uint8List salt, Uint8List ikm) async {
     final effectiveSalt = salt.isEmpty ? Uint8List(32) : salt;
-    final mac = await _hmac.calculateMac(
-      ikm,
-      secretKey: SecretKeyData(effectiveSalt),
-    );
+    try {
+      final mac = await _hmac.calculateMac(
+        ikm,
+        secretKey: SecretKeyData(effectiveSalt),
+      );
 
-    return Uint8List.fromList(mac.bytes);
+      return Uint8List.fromList(mac.bytes);
+    } catch (e) {
+      throw OhttpCryptoException('HKDF-Extract failed', cause: e);
+    }
   }
 
   /// HKDF-Expand(prk, info, length)
@@ -89,21 +95,25 @@ class HpkeSender {
     Uint8List info,
     int length,
   ) async {
-    final hashLen = 32; // SHA-256
-    final n = (length + hashLen - 1) ~/ hashLen;
-    var t = Uint8List(0);
-    final okm = BytesBuilder();
-    for (var i = 1; i <= n; i++) {
-      final input = Uint8List.fromList([...t, ...info, i]);
-      final mac = await _hmac.calculateMac(
-        input,
-        secretKey: SecretKeyData(prk),
-      );
-      t = Uint8List.fromList(mac.bytes);
-      okm.add(t);
-    }
+    try {
+      final hashLen = 32; // SHA-256
+      final n = (length + hashLen - 1) ~/ hashLen;
+      var t = Uint8List(0);
+      final okm = BytesBuilder();
+      for (var i = 1; i <= n; i++) {
+        final input = Uint8List.fromList([...t, ...info, i]);
+        final mac = await _hmac.calculateMac(
+          input,
+          secretKey: SecretKeyData(prk),
+        );
+        t = Uint8List.fromList(mac.bytes);
+        okm.add(t);
+      }
 
-    return Uint8List.sublistView(Uint8List.fromList(okm.toBytes()), 0, length);
+      return Uint8List.sublistView(Uint8List.fromList(okm.toBytes()), 0, length);
+    } catch (e) {
+      throw OhttpCryptoException('HKDF-Expand failed', cause: e);
+    }
   }
 
   // -- KEM Encap (RFC 9180 §4.1) --
@@ -112,37 +122,41 @@ class HpkeSender {
     Uint8List recipientPkBytes, {
     SimpleKeyPairData? testKeyPair,
   }) async {
-    // Ephemeral keypair
-    final KeyPair ephKp;
-    if (testKeyPair != null) {
-      ephKp = testKeyPair;
-    } else {
-      ephKp = await _x25519.newKeyPair();
+    try {
+      // Ephemeral keypair
+      final KeyPair ephKp;
+      if (testKeyPair != null) {
+        ephKp = testKeyPair;
+      } else {
+        ephKp = await _x25519.newKeyPair();
+      }
+
+      final ephKpData = await ephKp.extract();
+      final enc = Uint8List.fromList(
+        (ephKpData.publicKey as SimplePublicKey).bytes,
+      );
+
+      // DH(skE, pkR)
+      final recipientPk = SimplePublicKey(
+        recipientPkBytes,
+        type: KeyPairType.x25519,
+      );
+      final dhResult = await _x25519.sharedSecretKey(
+        keyPair: ephKp,
+        remotePublicKey: recipientPk,
+      );
+      final dh = Uint8List.fromList(await dhResult.extractBytes());
+
+      // kem_context = enc || pkR
+      final kemContext = Uint8List.fromList([...enc, ...recipientPkBytes]);
+
+      // shared_secret = ExtractAndExpand(dh, kem_context)
+      final sharedSecret = await _extractAndExpand(dh, kemContext);
+
+      return (sharedSecret, enc);
+    } catch (e) {
+      throw OhttpCryptoException('HPKE KEM encap failed', cause: e);
     }
-
-    final ephKpData = await ephKp.extract();
-    final enc = Uint8List.fromList(
-      (ephKpData.publicKey as SimplePublicKey).bytes,
-    );
-
-    // DH(skE, pkR)
-    final recipientPk = SimplePublicKey(
-      recipientPkBytes,
-      type: KeyPairType.x25519,
-    );
-    final dhResult = await _x25519.sharedSecretKey(
-      keyPair: ephKp,
-      remotePublicKey: recipientPk,
-    );
-    final dh = Uint8List.fromList(await dhResult.extractBytes());
-
-    // kem_context = enc || pkR
-    final kemContext = Uint8List.fromList([...enc, ...recipientPkBytes]);
-
-    // shared_secret = ExtractAndExpand(dh, kem_context)
-    final sharedSecret = await _extractAndExpand(dh, kemContext);
-
-    return (sharedSecret, enc);
   }
 
   static Future<Uint8List> _extractAndExpand(
@@ -293,17 +307,21 @@ class HpkeSenderContext {
   /// Each call increments the internal sequence counter (RFC 9180 §5.2).
   Future<Uint8List> seal(Uint8List aad, Uint8List plaintext) async {
     final nonce = _computeNonce();
-    final secretBox = await HpkeSender._aesGcm.encrypt(
-      plaintext,
-      secretKey: SecretKeyData(key),
-      nonce: nonce,
-      aad: aad,
-    );
+    try {
+      final secretBox = await HpkeSender._aesGcm.encrypt(
+        plaintext,
+        secretKey: SecretKeyData(key),
+        nonce: nonce,
+        aad: aad,
+      );
 
-    return Uint8List.fromList([
-      ...secretBox.cipherText,
-      ...secretBox.mac.bytes,
-    ]);
+      return Uint8List.fromList([
+        ...secretBox.cipherText,
+        ...secretBox.mac.bytes,
+      ]);
+    } catch (e) {
+      throw OhttpCryptoException('HPKE seal failed', cause: e);
+    }
   }
 
   /// Export a secret from this HPKE context (RFC 9180 §5.3).
@@ -319,7 +337,7 @@ class HpkeSenderContext {
   /// Matches BouncyCastle AEAD.computeNonce() (RFC 9180 §5.2).
   Uint8List _computeNonce() {
     if (_seq >= (1 << 32)) {
-      throw StateError('HPKE message limit reached');
+      throw OhttpCryptoException('HPKE message limit reached');
     }
     final nonce = Uint8List.fromList(baseNonce);
     // XOR seq (as big-endian) into the last bytes of nonce

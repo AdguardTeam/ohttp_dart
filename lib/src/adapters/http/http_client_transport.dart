@@ -54,7 +54,17 @@ class HttpClientTransport implements OhttpTransport {
 
   @override
   Future<Uint8List> fetchKeyConfig() async {
-    final response = await _client.get(_keysUrl);
+    final http.Response response;
+    try {
+      response = await _client.get(_keysUrl);
+    } on OhttpException {
+      rethrow;
+    } catch (e) {
+      throw OhttpNetworkException(
+        'Network error while fetching KeyConfig from $_keysUrl',
+        cause: e,
+      );
+    }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw OhttpGatewayException(
@@ -68,13 +78,23 @@ class HttpClientTransport implements OhttpTransport {
 
   @override
   Future<Uint8List> postToGateway(Uint8List body) async {
-    final response = await _client.post(
-      _gatewayUrl,
-      headers: {
-        'content-type': _ohttpMediaType,
-      },
-      body: body,
-    );
+    final http.Response response;
+    try {
+      response = await _client.post(
+        _gatewayUrl,
+        headers: {
+          'content-type': _ohttpMediaType,
+        },
+        body: body,
+      );
+    } on OhttpException {
+      rethrow;
+    } catch (e) {
+      throw OhttpNetworkException(
+        'Network error while posting to Gateway $_gatewayUrl',
+        cause: e,
+      );
+    }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw OhttpGatewayException(

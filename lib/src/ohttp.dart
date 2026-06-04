@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 
+import 'exceptions.dart';
 import 'hpke.dart';
 
 // ---------------------------------------------------------------------------
@@ -42,10 +43,10 @@ class OhttpKeyConfig {
 
   /// Parses a binary OHTTP key configuration per RFC 9458 §3.
   ///
-  /// Throws [FormatException] if [data] is malformed.
+  /// Throws [OhttpFormatException] if [data] is malformed.
   factory OhttpKeyConfig.parse(Uint8List data) {
     if (data.length < 7) {
-      throw FormatException(
+      throw OhttpFormatException(
         'KeyConfig too short: ${data.length} bytes (min 7)',
       );
     }
@@ -62,11 +63,11 @@ class OhttpKeyConfig {
         pkLen = 32;
         break;
       default:
-        throw FormatException('Unsupported KEM: 0x${kemId.toRadixString(16)}');
+        throw OhttpFormatException('Unsupported KEM: 0x${kemId.toRadixString(16)}');
     }
 
     if (data.length < offset + pkLen + 2) {
-      throw const FormatException('KeyConfig too short for public key');
+      throw const OhttpFormatException('KeyConfig too short for public key');
     }
     final publicKey = Uint8List.fromList(data.sublist(offset, offset + pkLen));
     offset += pkLen;
@@ -75,7 +76,7 @@ class OhttpKeyConfig {
     offset += 2;
 
     if (symLen < 4 || data.length < offset + symLen) {
-      throw const FormatException('Invalid symmetric algorithms section');
+      throw const OhttpFormatException('Invalid symmetric algorithms section');
     }
 
     // Read first (and typically only) KDF+AEAD pair
@@ -95,20 +96,20 @@ class OhttpKeyConfig {
   /// Validates that the cipher suite is supported:
   /// X25519 (`0x0020`) + HKDF-SHA256 (`0x0001`) + AES-128-GCM (`0x0001`).
   ///
-  /// Throws [UnsupportedError] if any component is not supported.
+  /// Throws [OhttpConfigException] if any component is not supported.
   void validate() {
     if (kemId != 0x0020) {
-      throw UnsupportedError(
+      throw OhttpConfigException(
         'Unsupported KEM: 0x${kemId.toRadixString(16)} (expected X25519 0x0020)',
       );
     }
     if (kdfId != 0x0001) {
-      throw UnsupportedError(
+      throw OhttpConfigException(
         'Unsupported KDF: 0x${kdfId.toRadixString(16)} (expected HKDF-SHA256 0x0001)',
       );
     }
     if (aeadId != 0x0001) {
-      throw UnsupportedError(
+      throw OhttpConfigException(
         'Unsupported AEAD: 0x${aeadId.toRadixString(16)} (expected AES-128-GCM 0x0001)',
       );
     }
@@ -196,7 +197,7 @@ Future<Uint8List> ohttpDecapsulate(
   Uint8List encResponse,
 ) async {
   if (encResponse.length <= _responseNonceLen) {
-    throw FormatException(
+    throw OhttpDecapsulationException(
       'Encrypted response too short: ${encResponse.length} bytes',
     );
   }
@@ -228,18 +229,23 @@ Future<Uint8List> ohttpDecapsulate(
   // AES-128-GCM decrypt with empty AAD
   final tagLen = 16;
   if (ciphertext.length < tagLen) {
-    throw const FormatException('Ciphertext too short for AES-GCM tag');
+    throw const OhttpDecapsulationException('Ciphertext too short for AES-GCM tag');
   }
   final ct = ciphertext.sublist(0, ciphertext.length - tagLen);
   final tag = ciphertext.sublist(ciphertext.length - tagLen);
 
   final aesGcm = AesGcm.with128bits();
   final secretBox = SecretBox(ct, nonce: aeadNonce, mac: Mac(tag));
-  final plaintext = await aesGcm.decrypt(
-    secretBox,
-    secretKey: SecretKeyData(aeadKey),
-    aad: [],
-  );
+  final List<int> plaintext;
+  try {
+    plaintext = await aesGcm.decrypt(
+      secretBox,
+      secretKey: SecretKeyData(aeadKey),
+      aad: [],
+    );
+  } catch (e) {
+    throw OhttpCryptoException('Failed to decrypt OHTTP response', cause: e);
+  }
 
   return Uint8List.fromList(plaintext);
 }
