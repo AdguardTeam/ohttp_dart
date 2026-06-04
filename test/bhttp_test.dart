@@ -180,7 +180,7 @@ void main() {
 
       expect(
         () => parseResponse(buf.toBytes()),
-        throwsA(isA<FormatException>()),
+        throwsA(isA<OhttpFormatException>()),
       );
     });
   });
