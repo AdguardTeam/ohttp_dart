@@ -75,21 +75,47 @@ class OhttpKeyConfig {
     final symLen = (data[offset] << 8) | data[offset + 1];
     offset += 2;
 
-    if (symLen < 4 || data.length < offset + symLen) {
-      throw const OhttpFormatException('Invalid symmetric algorithms section');
+    // Validate: symLen must be >= 4, a multiple of 4 (each KDF+AEAD pair is 4 bytes),
+    // and the data must contain enough bytes for the section (RFC 9458 §3 / §4.1).
+    if (symLen < 4 || symLen % 4 != 0 || data.length < offset + symLen) {
+      throw OhttpFormatException(
+        'Invalid symmetric algorithms section: '
+        'symLen=$symLen (must be >= 4, a multiple of 4, and fit in data)',
+      );
     }
 
-    // Read first (and typically only) KDF+AEAD pair
-    final kdfId = (data[offset] << 8) | data[offset + 1];
-    offset += 2;
-    final aeadId = (data[offset] << 8) | data[offset + 1];
+    // Iterate through all KDF+AEAD pairs and select the first supported one.
+    // RFC 9458 §4.1 allows a gateway to advertise multiple pairs.
+    int? selectedKdfId;
+    int? selectedAeadId;
+    final symEnd = offset + symLen;
+
+    while (offset < symEnd) {
+      final pairKdfId = (data[offset] << 8) | data[offset + 1];
+      offset += 2;
+      final pairAeadId = (data[offset] << 8) | data[offset + 1];
+      offset += 2;
+
+      // Select first supported: HKDF-SHA256 (0x0001) + AES-128-GCM (0x0001)
+      if (selectedKdfId == null && pairKdfId == 0x0001 && pairAeadId == 0x0001) {
+        selectedKdfId = pairKdfId;
+        selectedAeadId = pairAeadId;
+      }
+    }
+
+    if (selectedKdfId == null || selectedAeadId == null) {
+      throw const OhttpConfigException(
+        'No supported cipher suite found in KeyConfig '
+        '(expected KDF=HKDF-SHA256 0x0001, AEAD=AES-128-GCM 0x0001)',
+      );
+    }
 
     return OhttpKeyConfig(
       keyId: keyId,
       kemId: kemId,
       publicKey: publicKey,
-      kdfId: kdfId,
-      aeadId: aeadId,
+      kdfId: selectedKdfId,
+      aeadId: selectedAeadId,
     );
   }
 
