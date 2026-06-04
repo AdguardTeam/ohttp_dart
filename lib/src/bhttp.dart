@@ -125,10 +125,16 @@ void _writeField(BytesBuilder buf, List<int> data) {
 /// A parsed BHTTP response.
 // ignore: prefer-match-file-name
 class BhttpResponse {
+  /// HTTP status code.
   final int statusCode;
+
+  /// Response headers as name-value pairs, preserving insertion order.
   final List<(String, String)> headers;
+
+  /// Raw response body bytes.
   final Uint8List body;
 
+  /// Creates a parsed BHTTP response.
   BhttpResponse({
     required this.statusCode,
     required this.headers,

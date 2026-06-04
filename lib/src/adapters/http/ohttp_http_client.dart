@@ -14,10 +14,6 @@ import 'package:ohttp_dart/src/ohttp_session.dart';
 /// If the caller omits the `host` header it is synthesized from the URL;
 /// an explicit `host` is passed through unchanged. Default ports (80 for
 /// http, 443 for https) are omitted from the authority.
-///
-/// When [_closeWith] is supplied, [close] delegates to that client;
-/// otherwise [close] is a no-op, leaving lifecycle management to the
-/// caller's DI layer.
 class OhttpHttpClient extends BaseClient {
   static const _defaultHttpPort = 80;
   static const _defaultHttpsPort = 443;
@@ -26,6 +22,11 @@ class OhttpHttpClient extends BaseClient {
   final OhttpSession _session;
   final Client? _closeWith;
 
+  /// Creates an OHTTP-aware HTTP client backed by [session].
+  ///
+  /// When [closeWith] is supplied, [close] delegates to that client;
+  /// otherwise [close] is a no-op, leaving lifecycle management to the
+  /// caller's DI layer.
   OhttpHttpClient({
     required OhttpSession session,
     Client? closeWith,

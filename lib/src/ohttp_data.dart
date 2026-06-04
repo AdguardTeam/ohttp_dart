@@ -2,13 +2,7 @@ import 'dart:typed_data';
 import 'exceptions.dart';
 
 /// HTTP-client-neutral request data.
-///
-/// The [authority] field holds the inner target host that the gateway
-/// forwards to; the gateway URL itself is the transport's concern.
-///
-/// Headers stored as a list to preserve insertion order and duplicate
-/// names (e.g. Set-Cookie). Collapsing to a map is deferred to adapters
-/// that require it.
+
 // ignore: prefer-match-file-name
 class OhttpRequestData {
   /// Matches a URI scheme prefix like `http://`, `https://`, `ftp://`.
@@ -18,7 +12,10 @@ class OhttpRequestData {
   /// any whitespace, path separator (`/`), query (`?`), or fragment (`#`).
   static final _invalidAuthorityChars = RegExp(r'[\s/?#]');
 
+  /// HTTP method (e.g. `GET`, `POST`).
   final String method;
+
+  /// URI scheme (e.g. `http`, `https`).
   final String scheme;
 
   /// Inner target host the gateway forwards to, not the gateway URL.
@@ -33,8 +30,13 @@ class OhttpRequestData {
   /// - `192.168.1.1:8080`
   final String authority;
 
+  /// Request path
   final String path;
+
+  /// Request headers as name-value pairs, preserving insertion order
   final List<(String, String)> headers;
+
+  /// Raw request body bytes.
   final Uint8List body;
 
   /// Creates HTTP request data for OHTTP encapsulation.
@@ -78,10 +80,16 @@ class OhttpRequestData {
 
 /// HTTP-client-neutral response data.
 class OhttpResponseData {
+  /// HTTP status code.
   final int statusCode;
+
+  /// Response headers as name-value pairs, preserving insertion order.
   final List<(String, String)> headers;
+
+  /// Raw response body bytes.
   final Uint8List body;
 
+  /// Creates HTTP response data.
   OhttpResponseData({
     required this.body,
     required this.statusCode,
