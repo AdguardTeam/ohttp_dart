@@ -1,5 +1,8 @@
 import 'dart:typed_data';
+
 import 'package:http/http.dart' as http;
+import 'package:meta/meta.dart';
+import 'package:ohttp_dart/src/exceptions.dart';
 import 'package:ohttp_dart/src/ohttp_transport.dart';
 
 /// An [OhttpTransport] that delegates HTTP calls to an injected [http.Client].
@@ -15,7 +18,33 @@ class HttpClientTransport implements OhttpTransport {
   final Uri _keysUrl;
   final Uri _gatewayUrl;
 
+  /// Creates an HTTP client transport for OHTTP.
+  ///
+  /// Throws [OhttpConfigException] if [keysUrl] or [gatewayUrl] do not use
+  /// the HTTPS scheme.
+  ///
+  /// ## Security Warning
+  ///
+  /// Per [RFC 9458 §1](https://www.rfc-editor.org/rfc/rfc9458#section-1),
+  /// the connection between the client and the relay/gateway MUST be protected
+  /// with TLS. Only HTTPS URLs are accepted.
   HttpClientTransport({
+    required http.Client client,
+    required Uri keysUrl,
+    required Uri gatewayUrl,
+  }) : _client = client,
+       _keysUrl = keysUrl,
+       _gatewayUrl = gatewayUrl {
+    _validateHttpsScheme(keysUrl, 'keysUrl');
+    _validateHttpsScheme(gatewayUrl, 'gatewayUrl');
+  }
+
+  /// Creates an HTTP client transport without HTTPS scheme validation.
+  ///
+  /// This constructor is intended **exclusively for testing scenarios**
+  /// (e.g., MockClient with http://localhost). Production code MUST NOT use it.
+  @visibleForTesting
+  HttpClientTransport.insecureForTesting({
     required http.Client client,
     required Uri keysUrl,
     required Uri gatewayUrl,
@@ -55,5 +84,14 @@ class HttpClientTransport implements OhttpTransport {
     }
 
     return response.bodyBytes;
+  }
+
+  void _validateHttpsScheme(Uri uri, String parameterName) {
+    if (uri.scheme != 'https') {
+      throw OhttpConfigException(
+        '$parameterName must use HTTPS scheme per RFC 9458 §1. '
+        'Got scheme: "${uri.scheme}"',
+      );
+    }
   }
 }

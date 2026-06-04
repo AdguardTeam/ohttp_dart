@@ -14,18 +14,3 @@ abstract interface class OhttpTransport {
   /// Implementations must set Content-Type: message/ohttp-req.
   Future<Uint8List> postToGateway(Uint8List body);
 }
-
-/// Thrown by [OhttpTransport] implementations when the gateway returns
-/// a non-2xx response.
-///
-/// Lives in the core (not in an adapter) because the invalidation policy
-/// that reacts to it lives in [OhttpSession].
-class OhttpGatewayException implements Exception {
-  final int statusCode;
-  final String message;
-
-  const OhttpGatewayException({required this.statusCode, required this.message});
-
-  @override
-  String toString() => 'OhttpGatewayException($statusCode): $message';
-}

@@ -8,6 +8,7 @@
 library;
 
 export 'src/bhttp.dart';
+export 'src/exceptions.dart';
 export 'src/hpke.dart';
 export 'src/key_config_cache.dart';
 export 'src/ohttp.dart';

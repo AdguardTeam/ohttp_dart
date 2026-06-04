@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'bhttp.dart' as bhttp;
+import 'exceptions.dart';
 import 'key_config_cache.dart';
 import 'ohttp.dart';
 import 'ohttp_data.dart';

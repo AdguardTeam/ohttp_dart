@@ -11,8 +11,13 @@ import 'package:cryptography/cryptography.dart';
 /// Implements only the sender side needed for OHTTP client.
 // ignore: prefer-match-file-name
 class HpkeSender {
+  /// KEM identifier: DHKEM(X25519, HKDF-SHA256) = `0x0020` (RFC 9180).
   static const int kemId = 0x0020;
+
+  /// KDF identifier: HKDF-SHA256 = `0x0001` (RFC 9180).
   static const int kdfId = 0x0001;
+
+  /// AEAD identifier: AES-128-GCM = `0x0001` (RFC 9180).
   static const int aeadId = 0x0001;
 
   static const int _nk = 16; // AEAD key length
@@ -262,9 +267,16 @@ class HpkeSender {
 
 /// Sender context returned by [HpkeSender.setupBaseS].
 class HpkeSenderContext {
+  /// Encapsulated public key (`enc`) sent to the recipient.
   final Uint8List enc;
+
+  /// AEAD encryption key derived by HPKE key schedule.
   final Uint8List key;
+
+  /// AEAD base nonce derived by HPKE key schedule.
   final Uint8List baseNonce;
+
+  /// Exporter secret for further key derivation (RFC 9180 §5.1).
   final Uint8List exporterSecret;
 
   HpkeSenderContext._({

@@ -8,9 +8,7 @@ import 'ohttp_transport.dart';
 /// (single-flight deduplication). A fetch failure is propagated to callers
 /// but does not evict a previously cached stale entry - use [invalidate]
 /// for forced eviction.
-///
-/// The injectable [_now] parameter (defaults to [DateTime.now]) enables
-/// deterministic TTL tests.
+
 class KeyConfigCache {
   static const _defaultTtl = Duration(hours: 1);
 
@@ -18,6 +16,10 @@ class KeyConfigCache {
   final Duration _ttl;
   final DateTime Function() _now;
 
+  /// Creates a TTL cache backed by [transport].
+  ///
+  /// [now] overrides the clock (defaults to [DateTime.now]).
+  /// [ttl] sets cache lifetime (defaults to 1 hour).
   KeyConfigCache({
     required OhttpTransport transport,
     DateTime Function()? now,

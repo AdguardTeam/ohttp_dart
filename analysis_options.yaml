@@ -66,6 +66,7 @@ linter:
     prefer_single_quotes: true
     prefer_spread_collections: true
     prefer_void_to_null: true
+    public_member_api_docs: true
     recursive_getters: true
     require_trailing_commas: true
     slash_for_doc_comments: true

@@ -16,12 +16,22 @@ import 'hpke.dart';
 ///   symmetric_algorithms_length (2 BE) || kdf_id (2 BE) || aead_id (2 BE)
 // ignore: prefer-match-file-name
 class OhttpKeyConfig {
+  /// Key identifier (1 byte, RFC 9458 §3).
   final int keyId;
+
+  /// KEM algorithm identifier.
   final int kemId;
+
+  /// Recipient X25519 public key bytes.
   final Uint8List publicKey;
+
+  /// KDF algorithm identifier.
   final int kdfId;
+
+  /// AEAD algorithm identifier.
   final int aeadId;
 
+  /// Creates an OHTTP key configuration.
   OhttpKeyConfig({
     required this.keyId,
     required this.kemId,
@@ -30,6 +40,9 @@ class OhttpKeyConfig {
     required this.aeadId,
   });
 
+  /// Parses a binary OHTTP key configuration per RFC 9458 §3.
+  ///
+  /// Throws [FormatException] if [data] is malformed.
   factory OhttpKeyConfig.parse(Uint8List data) {
     if (data.length < 7) {
       throw FormatException(
@@ -79,6 +92,10 @@ class OhttpKeyConfig {
     );
   }
 
+  /// Validates that the cipher suite is supported:
+  /// X25519 (`0x0020`) + HKDF-SHA256 (`0x0001`) + AES-128-GCM (`0x0001`).
+  ///
+  /// Throws [UnsupportedError] if any component is not supported.
   void validate() {
     if (kemId != 0x0020) {
       throw UnsupportedError(
@@ -113,6 +130,7 @@ class OhttpEncapsulateResult {
   /// The exported secret (needed for response decapsulation).
   final Uint8List exportedSecret;
 
+  /// Creates an OHTTP encapsulation result.
   OhttpEncapsulateResult({
     required this.encRequest,
     required this.enc,
