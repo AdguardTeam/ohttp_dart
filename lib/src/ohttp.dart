@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 
+import 'cipher_suite.dart';
 import 'exceptions.dart';
 import 'hpke.dart';
 
@@ -56,10 +57,10 @@ class OhttpKeyConfig {
     final kemId = (data[offset] << 8) | data[offset + 1];
     offset += 2;
 
-    // Public key length depends on KEM. For X25519 (0x0020) it's 32 bytes.
+    // Public key length depends on KEM. For X25519 it's 32 bytes.
     final int pkLen;
     switch (kemId) {
-      case 0x0020:
+      case CipherSuite.kemX25519Sha256:
         pkLen = 32;
         break;
       default:
@@ -96,17 +97,18 @@ class OhttpKeyConfig {
       final pairAeadId = (data[offset] << 8) | data[offset + 1];
       offset += 2;
 
-      // Select first supported: HKDF-SHA256 (0x0001) + AES-128-GCM (0x0001)
-      if (selectedKdfId == null && pairKdfId == 0x0001 && pairAeadId == 0x0001) {
+      // Select first supported: HKDF-SHA256 + AES-128-GCM
+      if (selectedKdfId == null && pairKdfId == CipherSuite.kdfHkdfSha256 && pairAeadId == CipherSuite.aeadAes128Gcm) {
         selectedKdfId = pairKdfId;
         selectedAeadId = pairAeadId;
       }
     }
 
     if (selectedKdfId == null || selectedAeadId == null) {
-      throw const OhttpConfigException(
+      throw OhttpConfigException(
         'No supported cipher suite found in KeyConfig '
-        '(expected KDF=HKDF-SHA256 0x0001, AEAD=AES-128-GCM 0x0001)',
+        '(expected KDF=HKDF-SHA256 0x${CipherSuite.kdfHkdfSha256.toRadixString(16)}, '
+        'AEAD=AES-128-GCM 0x${CipherSuite.aeadAes128Gcm.toRadixString(16)})',
       );
     }
 
@@ -124,19 +126,22 @@ class OhttpKeyConfig {
   ///
   /// Throws [OhttpConfigException] if any component is not supported.
   void validate() {
-    if (kemId != 0x0020) {
+    if (kemId != CipherSuite.kemX25519Sha256) {
       throw OhttpConfigException(
-        'Unsupported KEM: 0x${kemId.toRadixString(16)} (expected X25519 0x0020)',
+        'Unsupported KEM: 0x${kemId.toRadixString(16)} '
+        '(expected X25519 0x${CipherSuite.kemX25519Sha256.toRadixString(16)})',
       );
     }
-    if (kdfId != 0x0001) {
+    if (kdfId != CipherSuite.kdfHkdfSha256) {
       throw OhttpConfigException(
-        'Unsupported KDF: 0x${kdfId.toRadixString(16)} (expected HKDF-SHA256 0x0001)',
+        'Unsupported KDF: 0x${kdfId.toRadixString(16)} '
+        '(expected HKDF-SHA256 0x${CipherSuite.kdfHkdfSha256.toRadixString(16)})',
       );
     }
-    if (aeadId != 0x0001) {
+    if (aeadId != CipherSuite.aeadAes128Gcm) {
       throw OhttpConfigException(
-        'Unsupported AEAD: 0x${aeadId.toRadixString(16)} (expected AES-128-GCM 0x0001)',
+        'Unsupported AEAD: 0x${aeadId.toRadixString(16)} '
+        '(expected AES-128-GCM 0x${CipherSuite.aeadAes128Gcm.toRadixString(16)})',
       );
     }
   }

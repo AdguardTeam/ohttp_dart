@@ -13,15 +13,6 @@ import 'exceptions.dart';
 /// Implements only the sender side needed for OHTTP client.
 // ignore: prefer-match-file-name
 class HpkeSender {
-  /// KEM identifier: DHKEM(X25519, HKDF-SHA256) = `0x0020` (RFC 9180).
-  static const int kemId = 0x0020;
-
-  /// KDF identifier: HKDF-SHA256 = `0x0001` (RFC 9180).
-  static const int kdfId = 0x0001;
-
-  /// AEAD identifier: AES-128-GCM = `0x0001` (RFC 9180).
-  static const int aeadId = 0x0001;
-
   static const int _nk = 16; // AEAD key length
   static const int _nn = 12; // AEAD nonce length
   static const int _nh = 32; // Hash output length
