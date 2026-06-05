@@ -4,6 +4,8 @@ import 'package:cryptography/cryptography.dart';
 import 'package:ohttp_dart/ohttp_dart.dart';
 import 'package:test/test.dart';
 
+import 'test_utils.dart';
+
 void main() {
   group('OhttpKeyConfig.parse', () {
     test('parses valid 41-byte config', () {
@@ -25,14 +27,14 @@ void main() {
       expect(config.aeadId, 0x0001);
     });
 
-    test('throws on too-short data', () {
+    test('throws OhttpFormatException on too-short data', () {
       expect(
         () => OhttpKeyConfig.parse(Uint8List.fromList([0x01, 0x00])),
-        throwsA(isA<FormatException>()),
+        throwsA(isA<OhttpFormatException>()),
       );
     });
 
-    test('throws on unsupported KEM', () {
+    test('throws OhttpConfigException on unsupported KEM', () {
       final buf = BytesBuilder();
       buf.addByte(0x01);
       buf.add([0x00, 0x10]); // unsupported KEM
@@ -43,11 +45,11 @@ void main() {
 
       expect(
         () => OhttpKeyConfig.parse(Uint8List.fromList(buf.toBytes())),
-        throwsA(isA<FormatException>()),
+        throwsA(isA<OhttpConfigException>()),
       );
     });
 
-    test('throws on short symmetric section', () {
+    test('throws OhttpFormatException on short symmetric section', () {
       final buf = BytesBuilder();
       buf.addByte(0x01);
       buf.add([0x00, 0x20]);
@@ -57,7 +59,138 @@ void main() {
 
       expect(
         () => OhttpKeyConfig.parse(Uint8List.fromList(buf.toBytes())),
-        throwsA(isA<FormatException>()),
+        throwsA(isA<OhttpFormatException>()),
+      );
+    });
+
+    test('throws OhttpFormatException when data has trailing bytes after symmetric section', () {
+      final buf = BytesBuilder();
+      buf.addByte(0x01);
+      buf.add([0x00, 0x20]);
+      buf.add(List.filled(32, 0x00));
+      buf.add([0x00, 0x04]); // symLen = 4
+      buf.add([0x00, 0x01]); // supported KDF
+      buf.add([0x00, 0x01]); // supported AEAD
+      buf.add([0xFF, 0xFF]); // trailing bytes
+
+      expect(
+        () => OhttpKeyConfig.parse(Uint8List.fromList(buf.toBytes())),
+        throwsA(
+          isA<OhttpFormatException>().having(
+            (e) => e.message,
+            'message',
+            contains('trailing data'),
+          ),
+        ),
+      );
+    });
+
+    test('parses multi-suite: unsupported first, supported second', () {
+      // Gateway advertises unsupported KDF+AEAD first, then supported.
+      final config = multiSuiteKeyConfig(
+        suiteIds: [
+          (0x0002, 0x0002), // unsupported (HKDF-SHA384, AES-256-GCM)
+          (0x0001, 0x0001), // supported   (HKDF-SHA256, AES-128-GCM)
+        ],
+      );
+
+      final parsed = OhttpKeyConfig.parse(config);
+      expect(parsed.kdfId, 0x0001);
+      expect(parsed.aeadId, 0x0001);
+    });
+
+    test('parses multi-suite: three suites, supported is last', () {
+      final config = multiSuiteKeyConfig(
+        suiteIds: [
+          (0x0003, 0x0003), // unsupported
+          (0x0002, 0x0002), // unsupported
+          (0x0001, 0x0001), // supported
+        ],
+      );
+
+      final parsed = OhttpKeyConfig.parse(config);
+      expect(parsed.kdfId, 0x0001);
+      expect(parsed.aeadId, 0x0001);
+    });
+
+    test('selects first supported suite when multiple supported exist', () {
+      final config = multiSuiteKeyConfig(
+        suiteIds: [
+          (0x0001, 0x0001), // supported — should be selected
+          (0x0001, 0x0001), // also supported, but first wins
+        ],
+      );
+
+      final parsed = OhttpKeyConfig.parse(config);
+      expect(parsed.kdfId, 0x0001);
+      expect(parsed.aeadId, 0x0001);
+    });
+
+    test('throws OhttpConfigException when no suite is supported', () {
+      final config = multiSuiteKeyConfig(
+        suiteIds: [
+          (0x0002, 0x0002), // unsupported
+          (0x0003, 0x0003), // unsupported
+        ],
+      );
+
+      expect(
+        () => OhttpKeyConfig.parse(config),
+        throwsA(
+          isA<OhttpConfigException>().having(
+            (e) => e.message,
+            'message',
+            contains('No supported cipher suite'),
+          ),
+        ),
+      );
+    });
+
+    test('throws OhttpFormatException when symLen is not a multiple of 4', () {
+      final buf = BytesBuilder();
+      buf.addByte(0x01);
+      buf.add([0x00, 0x20]);
+      buf.add(List.filled(32, 0x00));
+      buf.add([0x00, 0x05]); // sym_len = 5 (not multiple of 4)
+      buf.add(List.filled(5, 0x00)); // 5 bytes of suite data
+
+      expect(
+        () => OhttpKeyConfig.parse(Uint8List.fromList(buf.toBytes())),
+        throwsA(
+          isA<OhttpFormatException>().having(
+            (e) => e.message,
+            'message',
+            contains('Invalid symmetric algorithms section'),
+          ),
+        ),
+      );
+    });
+
+    test('throws OhttpFormatException when symLen is 0', () {
+      final buf = BytesBuilder();
+      buf.addByte(0x01);
+      buf.add([0x00, 0x20]);
+      buf.add(List.filled(32, 0x00));
+      buf.add([0x00, 0x00]); // sym_len = 0
+
+      expect(
+        () => OhttpKeyConfig.parse(Uint8List.fromList(buf.toBytes())),
+        throwsA(isA<OhttpFormatException>()),
+      );
+    });
+
+    test('throws OhttpFormatException when data is shorter than symLen claims', () {
+      final buf = BytesBuilder();
+      buf.addByte(0x01);
+      buf.add([0x00, 0x20]);
+      buf.add(List.filled(32, 0x00));
+      buf.add([0x00, 0x08]); // sym_len = 8 (claims 8 bytes)
+      buf.add([0x00, 0x01]); // only 4 bytes available
+      buf.add([0x00, 0x01]);
+
+      expect(
+        () => OhttpKeyConfig.parse(Uint8List.fromList(buf.toBytes())),
+        throwsA(isA<OhttpFormatException>()),
       );
     });
   });
@@ -74,7 +207,7 @@ void main() {
       config.validate();
     });
 
-    test('rejects unsupported KEM', () {
+    test('rejects unsupported KEM with OhttpConfigException', () {
       final config = OhttpKeyConfig(
         keyId: 1,
         kemId: 0x0010,
@@ -82,10 +215,10 @@ void main() {
         kdfId: 0x0001,
         aeadId: 0x0001,
       );
-      expect(() => config.validate(), throwsA(isA<UnsupportedError>()));
+      expect(() => config.validate(), throwsA(isA<OhttpConfigException>()));
     });
 
-    test('rejects unsupported KDF', () {
+    test('rejects unsupported KDF with OhttpConfigException', () {
       final config = OhttpKeyConfig(
         keyId: 1,
         kemId: 0x0020,
@@ -93,10 +226,10 @@ void main() {
         kdfId: 0x0002,
         aeadId: 0x0001,
       );
-      expect(() => config.validate(), throwsA(isA<UnsupportedError>()));
+      expect(() => config.validate(), throwsA(isA<OhttpConfigException>()));
     });
 
-    test('rejects unsupported AEAD', () {
+    test('rejects unsupported AEAD with OhttpConfigException', () {
       final config = OhttpKeyConfig(
         keyId: 1,
         kemId: 0x0020,
@@ -104,7 +237,7 @@ void main() {
         kdfId: 0x0001,
         aeadId: 0x0002,
       );
-      expect(() => config.validate(), throwsA(isA<UnsupportedError>()));
+      expect(() => config.validate(), throwsA(isA<OhttpConfigException>()));
     });
   });
 
@@ -147,17 +280,36 @@ void main() {
   });
 
   group('ohttpDecapsulate', () {
-    test('rejects too-short response', () {
+    test('rejects too-short response with OhttpDecapsulationException', () {
       expect(
         () => ohttpDecapsulate(Uint8List(32), Uint8List(16), Uint8List(16)),
-        throwsA(isA<FormatException>()),
+        throwsA(isA<OhttpDecapsulationException>()),
       );
     });
 
     test('rejects response with only nonce and no valid ciphertext', () {
       expect(
         () => ohttpDecapsulate(Uint8List(32), Uint8List(16), Uint8List(17)),
-        throwsA(isA<FormatException>()),
+        throwsA(
+          isA<OhttpDecapsulationException>().having(
+            (e) => e.message,
+            'message',
+            contains('Ciphertext too short'),
+          ),
+        ),
+      );
+    });
+
+    test('throws OhttpCryptoException on authentication failure', () async {
+      // Build a fake encapsulated response with correct length but garbage ciphertext.
+      // response nonce (16) + ciphertext(8) + tag(16) = 40 bytes
+      final encResponse = Uint8List(40);
+      // fill with non-zero to avoid accidental decryption
+      encResponse.fillRange(0, encResponse.length, 0xFF);
+
+      await expectLater(
+        ohttpDecapsulate(Uint8List(32), Uint8List(16), encResponse),
+        throwsA(isA<OhttpCryptoException>()),
       );
     });
   });

@@ -64,7 +64,7 @@ class OhttpKeyConfig {
         pkLen = 32;
         break;
       default:
-        throw OhttpFormatException('Unsupported KEM: 0x${kemId.toRadixString(16)}');
+        throw OhttpConfigException('Unsupported KEM: 0x${kemId.toRadixString(16)}');
     }
 
     if (data.length < offset + pkLen + 2) {
@@ -77,11 +77,13 @@ class OhttpKeyConfig {
     offset += 2;
 
     // Validate: symLen must be >= 4, a multiple of 4 (each KDF+AEAD pair is 4 bytes),
-    // and the data must contain enough bytes for the section (RFC 9458 §3 / §4.1).
-    if (symLen < 4 || symLen % 4 != 0 || data.length < offset + symLen) {
+    // and the data must contain exactly enough bytes for the section — no trailing
+    // data is permitted after the symmetric algorithms section (RFC 9458 §3).
+    if (symLen < 4 || symLen % 4 != 0 || data.length != offset + symLen) {
       throw OhttpFormatException(
         'Invalid symmetric algorithms section: '
-        'symLen=$symLen (must be >= 4, a multiple of 4, and fit in data)',
+        'symLen=$symLen, data length ${data.length}, expected ${offset + symLen} '
+        '(must be >= 4, a multiple of 4, and have no trailing data)',
       );
     }
 
@@ -101,6 +103,7 @@ class OhttpKeyConfig {
       if (selectedKdfId == null && pairKdfId == CipherSuite.kdfHkdfSha256 && pairAeadId == CipherSuite.aeadAes128Gcm) {
         selectedKdfId = pairKdfId;
         selectedAeadId = pairAeadId;
+        break;
       }
     }
 

@@ -328,7 +328,7 @@ class HpkeSenderContext {
   /// Matches BouncyCastle AEAD.computeNonce() (RFC 9180 §5.2).
   Uint8List _computeNonce() {
     if (_seq >= (1 << 32)) {
-      throw OhttpCryptoException('HPKE message limit reached');
+      throw const OhttpCryptoException('HPKE message limit reached');
     }
     final nonce = Uint8List.fromList(baseNonce);
     // XOR seq (as big-endian) into the last bytes of nonce

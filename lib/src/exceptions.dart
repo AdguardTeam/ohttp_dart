@@ -2,7 +2,7 @@
 
 /// Base exception class for all OHTTP library errors.
 // ignore: prefer-match-file-name
-abstract class OhttpException implements Exception {
+sealed class OhttpException implements Exception {
   final String message;
 
   const OhttpException(this.message);
@@ -36,7 +36,7 @@ class OhttpCryptoException extends OhttpException {
   /// The original error from the underlying cryptographic library, if any.
   final Object? cause;
 
-  OhttpCryptoException(super.message, {this.cause});
+  const OhttpCryptoException(super.message, {this.cause});
 
   @override
   String toString() => cause != null ? '$runtimeType: $message (cause: $cause)' : super.toString();
@@ -59,7 +59,7 @@ class OhttpNetworkException extends OhttpException {
   /// The original error from the underlying HTTP client or network stack, if any.
   final Object? cause;
 
-  OhttpNetworkException(super.message, {this.cause});
+  const OhttpNetworkException(super.message, {this.cause});
 
   @override
   String toString() => cause != null ? '$runtimeType: $message (cause: $cause)' : super.toString();

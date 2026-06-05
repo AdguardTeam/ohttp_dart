@@ -178,6 +178,46 @@ void main() {
         throwsA(isA<OhttpGatewayException>().having((e) => e.statusCode, 'statusCode', 502)),
       );
     });
+
+    test('wraps network errors in OhttpNetworkException during fetchKeyConfig', () async {
+      final client = MockClient((request) async {
+        throw ClientException('connection refused');
+      });
+      final transport = HttpClientTransport.insecureForTesting(
+        client: client,
+        keysUrl: Uri.parse(keysUrl),
+        gatewayUrl: Uri.parse(gatewayUrl),
+      );
+
+      await expectLater(
+        transport.fetchKeyConfig(),
+        throwsA(
+          isA<OhttpNetworkException>()
+              .having((e) => e.message, 'message', contains('Network error while fetching KeyConfig'))
+              .having((e) => e.cause, 'cause', isA<ClientException>()),
+        ),
+      );
+    });
+
+    test('wraps network errors in OhttpNetworkException during postToGateway', () async {
+      final client = MockClient((request) async {
+        throw ClientException('connection reset');
+      });
+      final transport = HttpClientTransport.insecureForTesting(
+        client: client,
+        keysUrl: Uri.parse(keysUrl),
+        gatewayUrl: Uri.parse(gatewayUrl),
+      );
+
+      await expectLater(
+        transport.postToGateway(Uint8List(0)),
+        throwsA(
+          isA<OhttpNetworkException>()
+              .having((e) => e.message, 'message', contains('Network error while posting to Gateway'))
+              .having((e) => e.cause, 'cause', isA<ClientException>()),
+        ),
+      );
+    });
   });
 
   group('OhttpHttpClient', () {
