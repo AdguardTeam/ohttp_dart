@@ -263,7 +263,7 @@ Future<Uint8List> ohttpDecapsulate(
   );
 
   // AES-128-GCM decrypt with empty AAD
-  final tagLen = 16;
+  const tagLen = 16;
   if (ciphertext.length < tagLen) {
     throw const OhttpDecapsulationException('Ciphertext too short for AES-GCM tag');
   }

@@ -87,7 +87,7 @@ class HpkeSender {
     int length,
   ) async {
     try {
-      final hashLen = 32; // SHA-256
+      const hashLen = 32; // SHA-256
       final n = (length + hashLen - 1) ~/ hashLen;
       var t = Uint8List(0);
       final okm = BytesBuilder();

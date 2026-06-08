@@ -53,6 +53,7 @@ linter:
     prefer_collection_literals: true
     prefer_conditional_assignment: true
     prefer_const_constructors: true
+    prefer_const_declarations: true
     prefer_contains: true
     prefer_expression_function_bodies: true
     prefer_final_in_for_each: true
