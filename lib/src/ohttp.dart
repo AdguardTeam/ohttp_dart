@@ -44,10 +44,12 @@ class OhttpKeyConfig {
 
   /// Parses a binary OHTTP key configuration per RFC 9458 §3.
   ///
-  /// Throws [OhttpFormatException] if [data] is malformed.
+  /// Throws [OhttpKeyConfigException] if [data] is structurally malformed.
+  /// Throws [OhttpUnsupportedSuiteException] if no advertised cipher suite
+  /// is supported by this library.
   factory OhttpKeyConfig.parse(Uint8List data) {
     if (data.length < 7) {
-      throw OhttpFormatException(
+      throw OhttpKeyConfigException(
         'KeyConfig too short: ${data.length} bytes (min 7)',
       );
     }
@@ -64,11 +66,11 @@ class OhttpKeyConfig {
         pkLen = 32;
         break;
       default:
-        throw OhttpConfigException('Unsupported KEM: 0x${kemId.toRadixString(16)}');
+        throw OhttpUnsupportedSuiteException('Unsupported KEM: 0x${kemId.toRadixString(16)}');
     }
 
     if (data.length < offset + pkLen + 2) {
-      throw const OhttpFormatException('KeyConfig too short for public key');
+      throw const OhttpKeyConfigException('KeyConfig too short for public key');
     }
     final publicKey = Uint8List.fromList(data.sublist(offset, offset + pkLen));
     offset += pkLen;
@@ -80,7 +82,7 @@ class OhttpKeyConfig {
     // and the data must contain exactly enough bytes for the section — no trailing
     // data is permitted after the symmetric algorithms section (RFC 9458 §3).
     if (symLen < 4 || symLen % 4 != 0 || data.length != offset + symLen) {
-      throw OhttpFormatException(
+      throw OhttpKeyConfigException(
         'Invalid symmetric algorithms section: '
         'symLen=$symLen, data length ${data.length}, expected ${offset + symLen} '
         '(must be >= 4, a multiple of 4, and have no trailing data)',
@@ -108,7 +110,7 @@ class OhttpKeyConfig {
     }
 
     if (selectedKdfId == null || selectedAeadId == null) {
-      throw OhttpConfigException(
+      throw OhttpUnsupportedSuiteException(
         'No supported cipher suite found in KeyConfig '
         '(expected KDF=HKDF-SHA256 0x${CipherSuite.kdfHkdfSha256.toRadixString(16)}, '
         'AEAD=AES-128-GCM 0x${CipherSuite.aeadAes128Gcm.toRadixString(16)})',
@@ -127,22 +129,22 @@ class OhttpKeyConfig {
   /// Validates that the cipher suite is supported:
   /// X25519 (`0x0020`) + HKDF-SHA256 (`0x0001`) + AES-128-GCM (`0x0001`).
   ///
-  /// Throws [OhttpConfigException] if any component is not supported.
+  /// Throws [OhttpUnsupportedSuiteException] if any component is not supported.
   void validate() {
     if (kemId != CipherSuite.kemX25519Sha256) {
-      throw OhttpConfigException(
+      throw OhttpUnsupportedSuiteException(
         'Unsupported KEM: 0x${kemId.toRadixString(16)} '
         '(expected X25519 0x${CipherSuite.kemX25519Sha256.toRadixString(16)})',
       );
     }
     if (kdfId != CipherSuite.kdfHkdfSha256) {
-      throw OhttpConfigException(
+      throw OhttpUnsupportedSuiteException(
         'Unsupported KDF: 0x${kdfId.toRadixString(16)} '
         '(expected HKDF-SHA256 0x${CipherSuite.kdfHkdfSha256.toRadixString(16)})',
       );
     }
     if (aeadId != CipherSuite.aeadAes128Gcm) {
-      throw OhttpConfigException(
+      throw OhttpUnsupportedSuiteException(
         'Unsupported AEAD: 0x${aeadId.toRadixString(16)} '
         '(expected AES-128-GCM 0x${CipherSuite.aeadAes128Gcm.toRadixString(16)})',
       );

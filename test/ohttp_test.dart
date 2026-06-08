@@ -27,14 +27,14 @@ void main() {
       expect(config.aeadId, 0x0001);
     });
 
-    test('throws OhttpFormatException on too-short data', () {
+    test('throws OhttpKeyConfigException on too-short data', () {
       expect(
         () => OhttpKeyConfig.parse(Uint8List.fromList([0x01, 0x00])),
-        throwsA(isA<OhttpFormatException>()),
+        throwsA(isA<OhttpKeyConfigException>()),
       );
     });
 
-    test('throws OhttpConfigException on unsupported KEM', () {
+    test('throws OhttpUnsupportedSuiteException on unsupported KEM', () {
       final buf = BytesBuilder();
       buf.addByte(0x01);
       buf.add([0x00, 0x10]); // unsupported KEM
@@ -45,11 +45,11 @@ void main() {
 
       expect(
         () => OhttpKeyConfig.parse(Uint8List.fromList(buf.toBytes())),
-        throwsA(isA<OhttpConfigException>()),
+        throwsA(isA<OhttpUnsupportedSuiteException>()),
       );
     });
 
-    test('throws OhttpFormatException on short symmetric section', () {
+    test('throws OhttpKeyConfigException on short symmetric section', () {
       final buf = BytesBuilder();
       buf.addByte(0x01);
       buf.add([0x00, 0x20]);
@@ -59,11 +59,11 @@ void main() {
 
       expect(
         () => OhttpKeyConfig.parse(Uint8List.fromList(buf.toBytes())),
-        throwsA(isA<OhttpFormatException>()),
+        throwsA(isA<OhttpKeyConfigException>()),
       );
     });
 
-    test('throws OhttpFormatException when data has trailing bytes after symmetric section', () {
+    test('throws OhttpKeyConfigException when data has trailing bytes after symmetric section', () {
       final buf = BytesBuilder();
       buf.addByte(0x01);
       buf.add([0x00, 0x20]);
@@ -76,7 +76,7 @@ void main() {
       expect(
         () => OhttpKeyConfig.parse(Uint8List.fromList(buf.toBytes())),
         throwsA(
-          isA<OhttpFormatException>().having(
+          isA<OhttpKeyConfigException>().having(
             (e) => e.message,
             'message',
             contains('trailing data'),
@@ -126,7 +126,7 @@ void main() {
       expect(parsed.aeadId, 0x0001);
     });
 
-    test('throws OhttpConfigException when no suite is supported', () {
+    test('throws OhttpUnsupportedSuiteException when no suite is supported', () {
       final config = multiSuiteKeyConfig(
         suiteIds: [
           (0x0002, 0x0002), // unsupported
@@ -137,7 +137,7 @@ void main() {
       expect(
         () => OhttpKeyConfig.parse(config),
         throwsA(
-          isA<OhttpConfigException>().having(
+          isA<OhttpUnsupportedSuiteException>().having(
             (e) => e.message,
             'message',
             contains('No supported cipher suite'),
@@ -146,7 +146,7 @@ void main() {
       );
     });
 
-    test('throws OhttpFormatException when symLen is not a multiple of 4', () {
+    test('throws OhttpKeyConfigException when symLen is not a multiple of 4', () {
       final buf = BytesBuilder();
       buf.addByte(0x01);
       buf.add([0x00, 0x20]);
@@ -157,7 +157,7 @@ void main() {
       expect(
         () => OhttpKeyConfig.parse(Uint8List.fromList(buf.toBytes())),
         throwsA(
-          isA<OhttpFormatException>().having(
+          isA<OhttpKeyConfigException>().having(
             (e) => e.message,
             'message',
             contains('Invalid symmetric algorithms section'),
@@ -166,7 +166,7 @@ void main() {
       );
     });
 
-    test('throws OhttpFormatException when symLen is 0', () {
+    test('throws OhttpKeyConfigException when symLen is 0', () {
       final buf = BytesBuilder();
       buf.addByte(0x01);
       buf.add([0x00, 0x20]);
@@ -175,11 +175,11 @@ void main() {
 
       expect(
         () => OhttpKeyConfig.parse(Uint8List.fromList(buf.toBytes())),
-        throwsA(isA<OhttpFormatException>()),
+        throwsA(isA<OhttpKeyConfigException>()),
       );
     });
 
-    test('throws OhttpFormatException when data is shorter than symLen claims', () {
+    test('throws OhttpKeyConfigException when data is shorter than symLen claims', () {
       final buf = BytesBuilder();
       buf.addByte(0x01);
       buf.add([0x00, 0x20]);
@@ -190,7 +190,7 @@ void main() {
 
       expect(
         () => OhttpKeyConfig.parse(Uint8List.fromList(buf.toBytes())),
-        throwsA(isA<OhttpFormatException>()),
+        throwsA(isA<OhttpKeyConfigException>()),
       );
     });
   });
@@ -207,7 +207,7 @@ void main() {
       config.validate();
     });
 
-    test('rejects unsupported KEM with OhttpConfigException', () {
+    test('rejects unsupported KEM with OhttpUnsupportedSuiteException', () {
       final config = OhttpKeyConfig(
         keyId: 1,
         kemId: 0x0010,
@@ -215,10 +215,10 @@ void main() {
         kdfId: 0x0001,
         aeadId: 0x0001,
       );
-      expect(() => config.validate(), throwsA(isA<OhttpConfigException>()));
+      expect(() => config.validate(), throwsA(isA<OhttpUnsupportedSuiteException>()));
     });
 
-    test('rejects unsupported KDF with OhttpConfigException', () {
+    test('rejects unsupported KDF with OhttpUnsupportedSuiteException', () {
       final config = OhttpKeyConfig(
         keyId: 1,
         kemId: 0x0020,
@@ -226,10 +226,10 @@ void main() {
         kdfId: 0x0002,
         aeadId: 0x0001,
       );
-      expect(() => config.validate(), throwsA(isA<OhttpConfigException>()));
+      expect(() => config.validate(), throwsA(isA<OhttpUnsupportedSuiteException>()));
     });
 
-    test('rejects unsupported AEAD with OhttpConfigException', () {
+    test('rejects unsupported AEAD with OhttpUnsupportedSuiteException', () {
       final config = OhttpKeyConfig(
         keyId: 1,
         kemId: 0x0020,
@@ -237,7 +237,7 @@ void main() {
         kdfId: 0x0001,
         aeadId: 0x0002,
       );
-      expect(() => config.validate(), throwsA(isA<OhttpConfigException>()));
+      expect(() => config.validate(), throwsA(isA<OhttpUnsupportedSuiteException>()));
     });
   });
 

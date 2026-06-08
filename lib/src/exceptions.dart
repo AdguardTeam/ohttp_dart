@@ -11,9 +11,23 @@ sealed class OhttpException implements Exception {
   String toString() => '$runtimeType: $message';
 }
 
-/// Thrown when configuration parameters are invalid or missing.
+/// Thrown when configuration parameters are invalid or missing (e.g. wrong URL scheme, null arguments).
 class OhttpConfigException extends OhttpException {
   const OhttpConfigException(super.message);
+}
+
+/// Thrown when the gateway's [KeyConfig] announces only cipher suites
+/// that this library does not implement, or when a specific KEM/KDF/AEAD
+/// component is not supported.
+class OhttpUnsupportedSuiteException extends OhttpException {
+  const OhttpUnsupportedSuiteException(super.message);
+}
+
+/// Thrown when the binary [KeyConfig] payload fetched from the gateway
+/// is structurally malformed — too short, wrong lengths, trailing data,
+/// invalid symmetric algorithms section, etc.
+class OhttpKeyConfigException extends OhttpException {
+  const OhttpKeyConfigException(super.message);
 }
 
 /// Thrown by [OhttpTransport] implementations when the gateway returns
@@ -48,7 +62,9 @@ class OhttpDecapsulationException extends OhttpException {
   const OhttpDecapsulationException(super.message);
 }
 
-/// Thrown when parsing of binary data (KeyConfig, BHTTP) fails
+/// Thrown when parsing of Binary HTTP (BHTTP, RFC 9292) data fails —
+/// wrong framing indicator, truncated fields, etc.
+/// This covers decrypted response bodies and request serialization only.
 class OhttpFormatException extends OhttpException {
   const OhttpFormatException(super.message);
 }
