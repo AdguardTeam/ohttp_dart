@@ -75,7 +75,7 @@ class HpkeSender {
       );
 
       return Uint8List.fromList(mac.bytes);
-    } catch (e) {
+    } on Exception catch (e) {
       throw OhttpCryptoException('HKDF-Extract failed', cause: e);
     }
   }
@@ -102,7 +102,7 @@ class HpkeSender {
       }
 
       return Uint8List.sublistView(Uint8List.fromList(okm.toBytes()), 0, length);
-    } catch (e) {
+    } on Exception catch (e) {
       throw OhttpCryptoException('HKDF-Expand failed', cause: e);
     }
   }
@@ -145,7 +145,9 @@ class HpkeSender {
       final sharedSecret = await _extractAndExpand(dh, kemContext);
 
       return (sharedSecret, enc);
-    } catch (e) {
+    } on OhttpCryptoException {
+      rethrow;
+    } on Exception catch (e) {
       throw OhttpCryptoException('HPKE KEM encap failed', cause: e);
     }
   }
@@ -310,7 +312,7 @@ class HpkeSenderContext {
         ...secretBox.cipherText,
         ...secretBox.mac.bytes,
       ]);
-    } catch (e) {
+    } on Exception catch (e) {
       throw OhttpCryptoException('HPKE seal failed', cause: e);
     }
   }

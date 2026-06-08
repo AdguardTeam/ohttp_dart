@@ -279,7 +279,7 @@ Future<Uint8List> ohttpDecapsulate(
       secretKey: SecretKeyData(aeadKey),
       aad: [],
     );
-  } catch (e) {
+  } on Exception catch (e) {
     throw OhttpCryptoException('Failed to decrypt OHTTP response', cause: e);
   }
 
