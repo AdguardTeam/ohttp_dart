@@ -59,7 +59,7 @@ class HttpClientTransport implements OhttpTransport {
       response = await _client.get(_keysUrl);
     } on OhttpException {
       rethrow;
-    } catch (e) {
+    } on Exception catch (e) {
       throw OhttpNetworkException(
         'Network error while fetching KeyConfig from $_keysUrl',
         cause: e,
@@ -89,7 +89,7 @@ class HttpClientTransport implements OhttpTransport {
       );
     } on OhttpException {
       rethrow;
-    } catch (e) {
+    } on Exception catch (e) {
       throw OhttpNetworkException(
         'Network error while posting to Gateway $_gatewayUrl',
         cause: e,
