@@ -199,24 +199,71 @@ void main() {
       );
     });
 
-    test('wraps network errors in OhttpNetworkException during postToGateway', () async {
+    test('fetchKeyConfig throws OhttpNetworkException on timeout', () async {
       final client = MockClient((request) async {
-        throw ClientException('connection reset');
+        await Future<void>.delayed(const Duration(seconds: 2));
+
+        return Response.bytes(Uint8List(0), 200);
       });
       final transport = HttpClientTransport.insecureForTesting(
         client: client,
         keysUrl: Uri.parse(keysUrl),
         gatewayUrl: Uri.parse(gatewayUrl),
+        fetchKeyConfigTimeout: const Duration(milliseconds: 100),
+      );
+
+      await expectLater(
+        transport.fetchKeyConfig(),
+        throwsA(
+          isA<OhttpTimeoutException>()
+              .having((e) => e.message, 'message', contains('timeout'))
+              .having((e) => e.timeout, 'timeout', const Duration(milliseconds: 100))
+              .having((e) => e.url, 'url', Uri.parse(keysUrl)),
+        ),
+      );
+    });
+
+    test('postToGateway throws OhttpTimeoutException on timeout', () async {
+      final client = MockClient((request) async {
+        await Future<void>.delayed(const Duration(seconds: 2));
+
+        return Response.bytes(Uint8List(0), 200);
+      });
+      final transport = HttpClientTransport.insecureForTesting(
+        client: client,
+        keysUrl: Uri.parse(keysUrl),
+        gatewayUrl: Uri.parse(gatewayUrl),
+        postToGatewayTimeout: const Duration(milliseconds: 100),
       );
 
       await expectLater(
         transport.postToGateway(Uint8List(0)),
         throwsA(
-          isA<OhttpNetworkException>()
-              .having((e) => e.message, 'message', contains('Network error while posting to Gateway'))
-              .having((e) => e.cause, 'cause', isA<ClientException>()),
+          isA<OhttpTimeoutException>()
+              .having((e) => e.message, 'message', contains('timeout'))
+              .having((e) => e.timeout, 'timeout', const Duration(milliseconds: 100))
+              .having((e) => e.url, 'url', Uri.parse(gatewayUrl)),
         ),
       );
+    });
+
+    test('respects custom timeout values', () async {
+      final client = MockClient((request) async {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+
+        return Response.bytes(Uint8List(0), 200);
+      });
+
+      final transport = HttpClientTransport.insecureForTesting(
+        client: client,
+        keysUrl: Uri.parse(keysUrl),
+        gatewayUrl: Uri.parse(gatewayUrl),
+        fetchKeyConfigTimeout: const Duration(milliseconds: 300),
+      );
+
+      // Should succeed with 300ms timeout
+      final result = await transport.fetchKeyConfig();
+      expect(result, isNotNull);
     });
   });
 

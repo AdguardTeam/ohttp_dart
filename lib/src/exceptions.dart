@@ -80,3 +80,23 @@ class OhttpNetworkException extends OhttpException {
   @override
   String toString() => cause != null ? '$runtimeType: $message (cause: $cause)' : super.toString();
 }
+
+/// Thrown when an HTTP request exceeds its configured timeout.
+class OhttpTimeoutException extends OhttpNetworkException {
+  /// The timeout duration that was exceeded.
+  final Duration timeout;
+  final Uri? url;
+
+  const OhttpTimeoutException({
+    required String message,
+    required this.timeout,
+    this.url,
+  }) : super(message);
+
+  @override
+  String toString() {
+    final urlPart = url != null ? ' for $url' : '';
+
+    return 'OhttpTimeoutException: $message$urlPart (timeout: ${timeout.inSeconds}s)';
+  }
+}

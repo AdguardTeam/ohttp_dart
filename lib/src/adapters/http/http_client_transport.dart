@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -13,15 +14,21 @@ import 'package:ohttp_dart/src/ohttp_transport.dart';
 /// retains ownership of the [http.Client].
 class HttpClientTransport implements OhttpTransport {
   static const _ohttpMediaType = 'message/ohttp-req';
+  static const _defaultTimeout = Duration(seconds: 30);
 
   final http.Client _client;
   final Uri _keysUrl;
   final Uri _gatewayUrl;
+  final Duration _fetchKeyConfigTimeout;
+  final Duration _postToGatewayTimeout;
 
   /// Creates an HTTP client transport for OHTTP.
   ///
   /// Throws [OhttpConfigException] if [keysUrl] or [gatewayUrl] do not use
   /// the HTTPS scheme.
+  ///
+  /// [fetchKeyConfigTimeout] and [postToGatewayTimeout] control the maximum
+  /// time to wait for HTTP responses. Both default to 30 seconds.
   ///
   /// ## Security Warning
   ///
@@ -32,9 +39,13 @@ class HttpClientTransport implements OhttpTransport {
     required http.Client client,
     required Uri keysUrl,
     required Uri gatewayUrl,
+    Duration fetchKeyConfigTimeout = _defaultTimeout,
+    Duration postToGatewayTimeout = _defaultTimeout,
   }) : _client = client,
        _keysUrl = keysUrl,
-       _gatewayUrl = gatewayUrl {
+       _gatewayUrl = gatewayUrl,
+       _fetchKeyConfigTimeout = fetchKeyConfigTimeout,
+       _postToGatewayTimeout = postToGatewayTimeout {
     _validateHttpsScheme(keysUrl, 'keysUrl');
     _validateHttpsScheme(gatewayUrl, 'gatewayUrl');
   }
@@ -48,15 +59,25 @@ class HttpClientTransport implements OhttpTransport {
     required http.Client client,
     required Uri keysUrl,
     required Uri gatewayUrl,
+    Duration fetchKeyConfigTimeout = _defaultTimeout,
+    Duration postToGatewayTimeout = _defaultTimeout,
   }) : _client = client,
        _keysUrl = keysUrl,
-       _gatewayUrl = gatewayUrl;
+       _gatewayUrl = gatewayUrl,
+       _fetchKeyConfigTimeout = fetchKeyConfigTimeout,
+       _postToGatewayTimeout = postToGatewayTimeout;
 
   @override
   Future<Uint8List> fetchKeyConfig() async {
     final http.Response response;
     try {
-      response = await _client.get(_keysUrl);
+      response = await _client.get(_keysUrl).timeout(_fetchKeyConfigTimeout);
+    } on TimeoutException {
+      throw OhttpTimeoutException(
+        message: 'Fetch KeyConfig timeout',
+        timeout: _fetchKeyConfigTimeout,
+        url: _keysUrl,
+      );
     } on OhttpException {
       rethrow;
     } on Exception catch (e) {
@@ -80,12 +101,20 @@ class HttpClientTransport implements OhttpTransport {
   Future<Uint8List> postToGateway(Uint8List body) async {
     final http.Response response;
     try {
-      response = await _client.post(
-        _gatewayUrl,
-        headers: {
-          'content-type': _ohttpMediaType,
-        },
-        body: body,
+      response = await _client
+          .post(
+            _gatewayUrl,
+            headers: {
+              'content-type': _ohttpMediaType,
+            },
+            body: body,
+          )
+          .timeout(_postToGatewayTimeout);
+    } on TimeoutException {
+      throw OhttpTimeoutException(
+        message: 'Post to gateway timeout',
+        timeout: _postToGatewayTimeout,
+        url: _gatewayUrl,
       );
     } on OhttpException {
       rethrow;
