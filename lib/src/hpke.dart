@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 
+import 'cipher_suite.dart';
 import 'exceptions.dart';
 
 /// HPKE Base Mode Sender (RFC 9180) for the cipher suite:
@@ -13,11 +14,6 @@ import 'exceptions.dart';
 /// Implements only the sender side needed for OHTTP client.
 // ignore: prefer-match-file-name
 class HpkeSender {
-  static const int _nk = 16; // AEAD key length
-  static const int _nn = 12; // AEAD nonce length
-  static const int _nh = 32; // Hash output length
-  static const int _nSecret = 32; // KEM shared secret length
-
   // "KEM" || I2OSP(0x0020, 2)
   static final _kemSuiteId = Uint8List.fromList([
     0x4B, 0x45, 0x4D, // "KEM"
@@ -67,7 +63,7 @@ class HpkeSender {
 
   /// HKDF-Extract(salt, ikm) = HMAC-SHA256(key=salt, data=ikm)
   static Future<Uint8List> hkdfExtract(Uint8List salt, Uint8List ikm) async {
-    final effectiveSalt = salt.isEmpty ? Uint8List(32) : salt;
+    final effectiveSalt = salt.isEmpty ? Uint8List(CipherSuite.kdfHashLength) : salt;
     try {
       final mac = await _hmac.calculateMac(
         ikm,
@@ -87,7 +83,7 @@ class HpkeSender {
     int length,
   ) async {
     try {
-      const hashLen = 32; // SHA-256
+      const hashLen = CipherSuite.kdfHashLength;
       final n = (length + hashLen - 1) ~/ hashLen;
       var t = Uint8List(0);
       final okm = BytesBuilder();
@@ -168,7 +164,7 @@ class HpkeSender {
       prk,
       utf8.encode('shared_secret'),
       kemContext,
-      _nSecret,
+      CipherSuite.kemSharedSecretLength,
     );
   }
 
@@ -208,7 +204,7 @@ class HpkeSender {
       secret,
       utf8.encode('key'),
       ksContext,
-      _nk,
+      CipherSuite.aeadKeyLength,
     );
 
     final baseNonce = await _labeledExpand(
@@ -216,7 +212,7 @@ class HpkeSender {
       secret,
       utf8.encode('base_nonce'),
       ksContext,
-      _nn,
+      CipherSuite.aeadNonceLength,
     );
 
     final exporterSecret = await _labeledExpand(
@@ -224,7 +220,7 @@ class HpkeSender {
       secret,
       utf8.encode('exp'),
       ksContext,
-      _nh,
+      CipherSuite.kdfHashLength,
     );
 
     return (key, baseNonce, exporterSecret);

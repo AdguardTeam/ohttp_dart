@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:ohttp_dart/ohttp_dart.dart';
+import 'package:ohttp_dart/src/cipher_suite.dart';
 import 'package:test/test.dart';
 
 /// Helper: hex string → Uint8List.
@@ -77,7 +78,7 @@ void main() {
 
     // Export test vector
     final exportContext = _hex('00');
-    const exportLength = 32;
+    const exportLength = CipherSuite.kdfHashLength;
     const expectedExportValue = '2e8f0b54673c7029649d4eb9d5e33bf1872cf76d623ff164ac185da9e88c21a5';
 
     test(
@@ -171,7 +172,7 @@ void main() {
         ...utf8.encode('shared_secret'),
         ...kemContext,
       ]);
-      final sharedSecret = await HpkeSender.hkdfExpand(prk, labeledInfo, 32);
+      final sharedSecret = await HpkeSender.hkdfExpand(prk, labeledInfo, CipherSuite.kdfHashLength);
       expect(_toHex(sharedSecret), expectedSharedSecret);
     });
 
@@ -213,7 +214,7 @@ void main() {
         testKeyPair: testKeyPair,
       );
 
-      final exportValue = await ctx.export(Uint8List(0), 32);
+      final exportValue = await ctx.export(Uint8List(0), CipherSuite.kdfHashLength);
       expect(
         _toHex(exportValue),
         '3853fe2b4035195a573ffc53856e77058e15d9ea064de3e59f4961d0095250ee',
@@ -234,7 +235,7 @@ void main() {
       );
 
       final exportCtx = _hex('54657374436f6e74657874');
-      final exportValue = await ctx.export(exportCtx, 32);
+      final exportValue = await ctx.export(exportCtx, CipherSuite.kdfHashLength);
       expect(
         _toHex(exportValue),
         'e9e43065102c3836401bed8c3c3c75ae46be1639869391d62c61f1ec7af54931',
@@ -265,7 +266,7 @@ void main() {
         Uint8List(0),
         Uint8List.fromList(utf8.encode('test')),
       );
-      expect(result.length, 32);
+      expect(result.length, CipherSuite.kdfHashLength);
     });
 
     test('hkdfExpand produces correct length', () async {
@@ -276,9 +277,9 @@ void main() {
       final okm = await HpkeSender.hkdfExpand(
         prk,
         Uint8List.fromList(utf8.encode('info')),
-        16,
+        CipherSuite.kdfHashLength,
       );
-      expect(okm.length, 16);
+      expect(okm.length, CipherSuite.kdfHashLength);
     });
 
     test('hkdfExpand for 32 bytes', () async {

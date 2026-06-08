@@ -63,7 +63,7 @@ class OhttpKeyConfig {
     final int pkLen;
     switch (kemId) {
       case CipherSuite.kemX25519Sha256:
-        pkLen = 32;
+        pkLen = CipherSuite.kemPublicKeyLength;
         break;
       default:
         throw OhttpUnsupportedSuiteException('Unsupported KEM: 0x${kemId.toRadixString(16)}');
@@ -175,10 +175,11 @@ class OhttpEncapsulateResult {
   });
 }
 
-// AES-128-GCM parameters
-const int _nk = 16;
-const int _nn = 12;
-const int _responseNonceLen = 16; // max(Nn, Nk)
+// OHTTP response nonce length = max(Nn, Nk) per RFC 9458 §4.6.2.
+// Derived from AEAD parameters: for AES-128-GCM, max(12, 16) = 16.
+const _responseNonceLen = CipherSuite.aeadKeyLength > CipherSuite.aeadNonceLength
+    ? CipherSuite.aeadKeyLength
+    : CipherSuite.aeadNonceLength;
 
 /// Encapsulate a BHTTP request via OHTTP (RFC 9458 §4.6.1).
 ///
@@ -252,18 +253,18 @@ Future<Uint8List> ohttpDecapsulate(
   final aeadKey = await HpkeSender.hkdfExpand(
     prk,
     Uint8List.fromList(utf8.encode('key')),
-    _nk,
+    CipherSuite.aeadKeyLength,
   );
 
   // nonce = HKDF-Expand(prk, "nonce", Nn)
   final aeadNonce = await HpkeSender.hkdfExpand(
     prk,
     Uint8List.fromList(utf8.encode('nonce')),
-    _nn,
+    CipherSuite.aeadNonceLength,
   );
 
   // AES-128-GCM decrypt with empty AAD
-  const tagLen = 16;
+  const tagLen = CipherSuite.aeadTagLength;
   if (ciphertext.length < tagLen) {
     throw const OhttpDecapsulationException('Ciphertext too short for AES-GCM tag');
   }
