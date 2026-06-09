@@ -64,15 +64,18 @@ class HpkeSender {
   /// HKDF-Extract(salt, ikm) = HMAC-SHA256(key=salt, data=ikm)
   static Future<Uint8List> hkdfExtract(Uint8List salt, Uint8List ikm) async {
     final effectiveSalt = salt.isEmpty ? Uint8List(CipherSuite.kdfHashLength) : salt;
+    final secretKey = SecretKeyData(effectiveSalt);
     try {
       final mac = await _hmac.calculateMac(
         ikm,
-        secretKey: SecretKeyData(effectiveSalt),
+        secretKey: secretKey,
       );
 
       return Uint8List.fromList(mac.bytes);
     } on Exception catch (e) {
       throw OhttpCryptoException('HKDF-Extract failed', cause: e);
+    } finally {
+      secretKey.destroy();
     }
   }
 
@@ -82,6 +85,7 @@ class HpkeSender {
     Uint8List info,
     int length,
   ) async {
+    final secretKey = SecretKeyData(prk);
     try {
       const hashLen = CipherSuite.kdfHashLength;
       final n = (length + hashLen - 1) ~/ hashLen;
@@ -91,7 +95,7 @@ class HpkeSender {
         final input = Uint8List.fromList([...t, ...info, i]);
         final mac = await _hmac.calculateMac(
           input,
-          secretKey: SecretKeyData(prk),
+          secretKey: secretKey,
         );
         t = Uint8List.fromList(mac.bytes);
         okm.add(t);
@@ -100,6 +104,8 @@ class HpkeSender {
       return Uint8List.sublistView(Uint8List.fromList(okm.toBytes()), 0, length);
     } on Exception catch (e) {
       throw OhttpCryptoException('HKDF-Expand failed', cause: e);
+    } finally {
+      secretKey.destroy();
     }
   }
 
@@ -296,10 +302,11 @@ class HpkeSenderContext {
   /// Each call increments the internal sequence counter (RFC 9180 §5.2).
   Future<Uint8List> seal(Uint8List aad, Uint8List plaintext) async {
     final nonce = _computeNonce();
+    final secretKey = SecretKeyData(key);
     try {
       final secretBox = await HpkeSender._aesGcm.encrypt(
         plaintext,
-        secretKey: SecretKeyData(key),
+        secretKey: secretKey,
         nonce: nonce,
         aad: aad,
       );
@@ -310,6 +317,8 @@ class HpkeSenderContext {
       ]);
     } on Exception catch (e) {
       throw OhttpCryptoException('HPKE seal failed', cause: e);
+    } finally {
+      secretKey.destroy();
     }
   }
 

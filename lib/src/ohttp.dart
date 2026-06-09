@@ -273,15 +273,18 @@ Future<Uint8List> ohttpDecapsulate(
 
   final aesGcm = AesGcm.with128bits();
   final secretBox = SecretBox(ct, nonce: aeadNonce, mac: Mac(tag));
+  final secretKey = SecretKeyData(aeadKey);
   final List<int> plaintext;
   try {
     plaintext = await aesGcm.decrypt(
       secretBox,
-      secretKey: SecretKeyData(aeadKey),
+      secretKey: secretKey,
       aad: [],
     );
   } on Exception catch (e) {
     throw OhttpCryptoException('Failed to decrypt OHTTP response', cause: e);
+  } finally {
+    secretKey.destroy();
   }
 
   return Uint8List.fromList(plaintext);
