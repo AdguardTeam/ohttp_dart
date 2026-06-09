@@ -59,10 +59,11 @@ class HttpClientTransport implements OhttpTransport {
       response = await _client.get(_keysUrl);
     } on OhttpException {
       rethrow;
-    } on Exception catch (e) {
+    } on Exception catch (e, st) {
       throw OhttpNetworkException(
         'Network error while fetching KeyConfig from $_keysUrl',
         cause: e,
+        stackTrace: st,
       );
     }
 
@@ -70,6 +71,7 @@ class HttpClientTransport implements OhttpTransport {
       throw OhttpGatewayException(
         statusCode: response.statusCode,
         message: 'Failed to fetch KeyConfig from $_keysUrl',
+        stackTrace: StackTrace.current,
       );
     }
 
@@ -89,10 +91,11 @@ class HttpClientTransport implements OhttpTransport {
       );
     } on OhttpException {
       rethrow;
-    } on Exception catch (e) {
+    } on Exception catch (e, st) {
       throw OhttpNetworkException(
         'Network error while posting to Gateway $_gatewayUrl',
         cause: e,
+        stackTrace: st,
       );
     }
 
@@ -100,6 +103,7 @@ class HttpClientTransport implements OhttpTransport {
       throw OhttpGatewayException(
         statusCode: response.statusCode,
         message: 'Failed to POST to Gateway $_gatewayUrl',
+        stackTrace: StackTrace.current,
       );
     }
 
@@ -111,6 +115,7 @@ class HttpClientTransport implements OhttpTransport {
       throw OhttpConfigException(
         '$parameterName must use HTTPS scheme per RFC 9458 §1. '
         'Got scheme: "${uri.scheme}"',
+        stackTrace: StackTrace.current,
       );
     }
   }

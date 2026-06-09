@@ -64,7 +64,10 @@ Uint8List encodeVarint(int value) {
 
       return (value, 8);
     default:
-      throw OhttpFormatException('Unexpected varint prefix: ${first >> 6}');
+      throw OhttpFormatException(
+        'Unexpected varint prefix: ${first >> 6}',
+        stackTrace: StackTrace.current,
+      );
   }
 }
 
@@ -154,6 +157,7 @@ BhttpResponse parseResponse(Uint8List data) {
     if (framing != 1) {
       throw OhttpFormatException(
         'Expected known-length response (framing=1), got $framing',
+        stackTrace: StackTrace.current,
       );
     }
 
@@ -199,9 +203,15 @@ BhttpResponse parseResponse(Uint8List data) {
     final body = Uint8List.fromList(data.sublist(offset, offset + contentLen));
 
     return BhttpResponse(statusCode: statusCode, headers: headers, body: body);
-  } on FormatException catch (e) {
-    throw OhttpFormatException('Malformed BHTTP response: ${e.message}');
-  } on RangeError catch (e) {
-    throw OhttpFormatException('BHTTP response out of bounds: ${e.message}');
+  } on FormatException catch (e, st) {
+    throw OhttpFormatException(
+      'Malformed BHTTP response: ${e.message}',
+      stackTrace: st,
+    );
+  } on RangeError catch (e, st) {
+    throw OhttpFormatException(
+      'BHTTP response out of bounds: ${e.message}',
+      stackTrace: st,
+    );
   }
 }

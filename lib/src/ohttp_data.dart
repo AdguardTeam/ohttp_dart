@@ -57,8 +57,9 @@ class OhttpRequestData {
 
   void _validateAuthority(String authority) {
     if (authority.isEmpty) {
-      throw const OhttpConfigException(
+      throw OhttpConfigException(
         'authority must not be empty per RFC 3986 §3.2',
+        stackTrace: StackTrace.current,
       );
     }
 
@@ -66,6 +67,7 @@ class OhttpRequestData {
       throw OhttpConfigException(
         'authority must not contain scheme prefix per RFC 3986 §3.2. '
         'Got: "$authority"',
+        stackTrace: StackTrace.current,
       );
     }
 
@@ -73,6 +75,7 @@ class OhttpRequestData {
       throw OhttpConfigException(
         'authority must not contain path, query, fragment, or whitespace '
         'per RFC 3986 §3.2. Got: "$authority"',
+        stackTrace: StackTrace.current,
       );
     }
   }
