@@ -64,7 +64,7 @@ class OhttpDecapsulationException extends OhttpException {
 
 /// Thrown when parsing of Binary HTTP (BHTTP, RFC 9292) data fails —
 /// wrong framing indicator, truncated fields, etc.
-/// This covers decrypted response bodies and request serialization only.
+/// This covers parsing of decrypted response bodies (framing, headers, varints).
 class OhttpFormatException extends OhttpException {
   const OhttpFormatException(super.message);
 }
