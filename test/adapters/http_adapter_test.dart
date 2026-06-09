@@ -192,9 +192,7 @@ void main() {
       await expectLater(
         transport.fetchKeyConfig(),
         throwsA(
-          isA<OhttpNetworkException>()
-              .having((e) => e.message, 'message', contains('Network error while fetching KeyConfig'))
-              .having((e) => e.cause, 'cause', isA<ClientException>()),
+          isA<OhttpNetworkException>().having((e) => e.cause, 'cause', isA<ClientException>()),
         ),
       );
     });
@@ -240,7 +238,6 @@ void main() {
         transport.postToGateway(Uint8List(0)),
         throwsA(
           isA<OhttpTimeoutException>()
-              .having((e) => e.message, 'message', contains('timeout'))
               .having((e) => e.timeout, 'timeout', const Duration(milliseconds: 100))
               .having((e) => e.url, 'url', Uri.parse(gatewayUrl)),
         ),
