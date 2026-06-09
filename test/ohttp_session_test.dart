@@ -8,6 +8,8 @@ import 'test_utils.dart';
 /// Fake transport that records calls and can be instructed to succeed or fail.
 class _FakeTransport implements OhttpTransport {
   final Uint8List config;
+  Uint8List? responseBody;
+
   _FakeTransport([Uint8List? config]) : config = config ?? validKeyConfig();
 
   int fetchCount = 0;
@@ -33,8 +35,8 @@ class _FakeTransport implements OhttpTransport {
       throw postError!;
     }
 
-    // Return arbitrary bytes; the caller is expected to handle decap failure.
-    return Uint8List(64);
+    // Return configured response body or arbitrary bytes.
+    return responseBody ?? Uint8List(64);
   }
 }
 
@@ -109,6 +111,56 @@ void main() {
       expect(transport.postCount, 1);
       expect(transport.lastPostBody, isNotNull);
       expect(transport.lastPostBody!.isNotEmpty, isTrue);
+    });
+
+    test('throws OhttpSizeLimitException when response exceeds maxResponseBytes', () async {
+      // Configure transport to return a large response
+      transport.responseBody = Uint8List(1000);
+
+      final limitedSession = OhttpSession(
+        transport: transport,
+        cache: KeyConfigCache(transport: transport),
+        maxResponseBytes: 500, // Set limit below actual response size
+      );
+
+      await expectLater(
+        limitedSession.send(request),
+        throwsA(
+          isA<OhttpSizeLimitException>()
+              .having((e) => e.limit, 'limit', 500)
+              .having((e) => e.actualSize, 'actualSize', 1000)
+              .having((e) => e.message, 'message', contains('size exceeds limit')),
+        ),
+      );
+    });
+
+    test('accepts response within maxResponseBytes limit', () async {
+      transport.responseBody = Uint8List(500);
+
+      final limitedSession = OhttpSession(
+        transport: transport,
+        cache: KeyConfigCache(transport: transport),
+        maxResponseBytes: 1000,
+      );
+
+      // Will fail at decapsulation (fake bytes), but should NOT throw
+      // OhttpSizeLimitException
+      await expectLater(
+        limitedSession.send(request),
+        throwsA(
+          isNot(isA<OhttpSizeLimitException>()),
+        ),
+      );
+    });
+
+    test('uses default maxResponseBytes of 10 MB', () async {
+      // Response larger than 10 MB should fail
+      transport.responseBody = Uint8List(11 * 1024 * 1024); // 11 MB
+
+      await expectLater(
+        session.send(request),
+        throwsA(isA<OhttpSizeLimitException>()),
+      );
     });
   });
 

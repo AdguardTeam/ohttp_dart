@@ -78,6 +78,25 @@ class OhttpFormatException extends OhttpException {
   const OhttpFormatException(super.message, {super.stackTrace});
 }
 
+/// Thrown when response data exceeds configured size limits.
+class OhttpSizeLimitException extends OhttpException {
+  /// The maximum allowed size in bytes.
+  final int limit;
+
+  /// The actual size in bytes that was received or attempted.
+  final int actualSize;
+
+  const OhttpSizeLimitException({
+    super.stackTrace,
+    required String message,
+    required this.limit,
+    required this.actualSize,
+  }) : super(message);
+
+  @override
+  String get baseMessage => 'OhttpSizeLimitException: $message (limit: $limit bytes, actual: $actualSize bytes)';
+}
+
 /// Thrown when a network-level error occurs during transport (DNS failure,
 /// connection refused, timeout, etc.).
 class OhttpNetworkException extends OhttpException {

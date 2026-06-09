@@ -17,23 +17,36 @@ import 'ohttp_transport.dart';
 /// [OhttpKeyConfig] is invalidated before the exception is re-thrown.
 /// Other exceptions (network errors, decapsulation failures) are
 /// propagated without invalidating the cache.
+///
+/// [maxResponseBytes] limits the maximum size of raw encrypted responses
+/// accepted from the gateway. Defaults to 10 MB. Throws
+/// [OhttpSizeLimitException] if the response exceeds this limit.
+///
 class OhttpSession {
+  static const _defaultMaxResponseBytes = 10 * 1024 * 1024; // 10 MB
+
   final OhttpTransport _transport;
   final KeyConfigCache _cache;
+  final int _maxResponseBytes;
 
   /// The [cache] must be backed by the same [transport] instance so that
   /// cache invalidation and gateway requests target the same gateway.
   OhttpSession({
     required OhttpTransport transport,
     required KeyConfigCache cache,
+    int maxResponseBytes = _defaultMaxResponseBytes,
   }) : _transport = transport,
-       _cache = cache;
+       _cache = cache,
+       _maxResponseBytes = maxResponseBytes;
 
   /// Shortcut that creates a [KeyConfigCache] over [transport] with the
   /// default TTL.
-  OhttpSession.withTransport({required OhttpTransport transport})
-    : _transport = transport,
-      _cache = KeyConfigCache(transport: transport);
+  OhttpSession.withTransport({
+    required OhttpTransport transport,
+    int maxResponseBytes = _defaultMaxResponseBytes,
+  }) : _transport = transport,
+       _cache = KeyConfigCache(transport: transport),
+       _maxResponseBytes = maxResponseBytes;
 
   /// Executes a full OHTTP round trip for [request].
   Future<OhttpResponseData> send(OhttpRequestData request) async {
@@ -56,6 +69,14 @@ class OhttpSession {
     } on OhttpGatewayException {
       _cache.invalidate();
       rethrow;
+    }
+
+    if (encResponse.length > _maxResponseBytes) {
+      throw OhttpSizeLimitException(
+        message: 'Gateway response size exceeds limit',
+        limit: _maxResponseBytes,
+        actualSize: encResponse.length,
+      );
     }
 
     final binaryResponse = await ohttpDecapsulate(
