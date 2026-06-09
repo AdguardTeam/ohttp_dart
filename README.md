@@ -64,11 +64,13 @@ Specific exception types:
 
 | Type | When |
 |---|---|
-| `OhttpConfigException` | Invalid configuration parameters, unsupported cipher suite |
-| `OhttpFormatException` | Malformed KeyConfig, BHTTP, or varint data |
+| `OhttpConfigException` | Invalid request/URL config (non-HTTPS scheme, bad authority) |
+| `OhttpUnsupportedSuiteException` | KeyConfig advertises only unsupported KEM/KDF/AEAD |
+| `OhttpKeyConfigException` | Structurally malformed KeyConfig (bad symLen, trailing data) |
+| `OhttpFormatException` | Malformed BHTTP / varint in the decrypted response |
 | `OhttpGatewayException` | Gateway returned non-2xx response (includes `statusCode`) |
-| `OhttpDecapsulationException` | Response too short or ciphertext too short for AES-GCM tag |
-| `OhttpCryptoException` | AES-GCM authentication failure (wraps underlying `cause`) |
+| `OhttpDecapsulationException` | Response too short / ciphertext too short for the GCM tag |
+| `OhttpCryptoException` | AES-GCM / HPKE crypto failure (wraps underlying `cause`) |
 | `OhttpNetworkException` | DNS failure, connection refused, timeout (wraps underlying `cause`) |
 
 ## Usage
