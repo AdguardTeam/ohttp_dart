@@ -34,15 +34,44 @@ lib/
     ├── bhttp.dart               # Binary HTTP (RFC 9292)
     ├── hpke.dart                # HPKE Base Mode Sender (RFC 9180)
     ├── ohttp.dart               # OHTTP encap/decap + KeyConfig (RFC 9458)
-    ├── transport.dart           # Transport abstraction
+    ├── ohttp_transport.dart     # Transport abstraction interface
     ├── ohttp_data.dart          # Request / response data types
     ├── key_config_cache.dart    # TTL cache with single-flight
     ├── ohttp_session.dart       # OHTTP session orchestrator
+    ├── cipher_suite.dart        # Cipher suite constants
+    ├── exceptions.dart          # Typed exception hierarchy
     └── adapters/
         └── http/
-            ├── http_transport.dart      # HttpClientTransport
-            └── ohttp_http_client.dart   # OhttpHttpClient
+            ├── http_client_transport.dart  # HttpClientTransport
+            └── ohttp_http_client.dart      # OhttpHttpClient
 ```
+
+## Error Handling
+
+All exceptions thrown by the library extend `OhttpException` (sealed class),
+so consumers can catch every library error with a single handler:
+
+```dart
+try {
+  final response = await session.send(request);
+} on OhttpException catch (e) {
+  // All library errors land here
+  print('OHTTP error: $e');
+}
+```
+
+Specific exception types:
+
+| Type | When |
+|---|---|
+| `OhttpConfigException` | Invalid request/URL config (non-HTTPS scheme, bad authority) |
+| `OhttpUnsupportedSuiteException` | KeyConfig advertises only unsupported KEM/KDF/AEAD |
+| `OhttpKeyConfigException` | Structurally malformed KeyConfig (bad symLen, trailing data) |
+| `OhttpFormatException` | Malformed BHTTP / varint in the decrypted response |
+| `OhttpGatewayException` | Gateway returned non-2xx response (includes `statusCode`) |
+| `OhttpDecapsulationException` | Response too short / ciphertext too short for the GCM tag |
+| `OhttpCryptoException` | AES-GCM / HPKE crypto failure (wraps underlying `cause`) |
+| `OhttpNetworkException` | DNS failure, connection refused, timeout (wraps underlying `cause`) |
 
 ## Usage
 
@@ -84,8 +113,8 @@ final response = await session.send(request);
 
 | Package | Purpose |
 |---------|---------|
-| `cryptography` ^2.9.0 | Pure Dart crypto primitives (X25519, HMAC, AES-GCM) |
-| `http` ^1.6.0 | HTTP client for gateway communication |
+| `cryptography` 2.9.0 | Pure Dart crypto primitives (X25519, HMAC, AES-GCM) |
+| `http` 1.6.0 | HTTP client for gateway communication |
 
 ## Testing
 

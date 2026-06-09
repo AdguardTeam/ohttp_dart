@@ -54,12 +54,24 @@ class HttpClientTransport implements OhttpTransport {
 
   @override
   Future<Uint8List> fetchKeyConfig() async {
-    final response = await _client.get(_keysUrl);
+    final http.Response response;
+    try {
+      response = await _client.get(_keysUrl);
+    } on OhttpException {
+      rethrow;
+    } on Exception catch (e, st) {
+      throw OhttpNetworkException(
+        'Network error while fetching KeyConfig',
+        cause: e,
+        stackTrace: st,
+      );
+    }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw OhttpGatewayException(
         statusCode: response.statusCode,
-        message: 'Failed to fetch KeyConfig from $_keysUrl',
+        message: 'Failed to fetch KeyConfig',
+        stackTrace: StackTrace.current,
       );
     }
 
@@ -68,18 +80,30 @@ class HttpClientTransport implements OhttpTransport {
 
   @override
   Future<Uint8List> postToGateway(Uint8List body) async {
-    final response = await _client.post(
-      _gatewayUrl,
-      headers: {
-        'content-type': _ohttpMediaType,
-      },
-      body: body,
-    );
+    final http.Response response;
+    try {
+      response = await _client.post(
+        _gatewayUrl,
+        headers: {
+          'content-type': _ohttpMediaType,
+        },
+        body: body,
+      );
+    } on OhttpException {
+      rethrow;
+    } on Exception catch (e, st) {
+      throw OhttpNetworkException(
+        'Network error while posting to Gateway',
+        cause: e,
+        stackTrace: st,
+      );
+    }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw OhttpGatewayException(
         statusCode: response.statusCode,
-        message: 'Failed to POST to Gateway $_gatewayUrl',
+        message: 'Failed to POST to Gateway',
+        stackTrace: StackTrace.current,
       );
     }
 
@@ -91,6 +115,7 @@ class HttpClientTransport implements OhttpTransport {
       throw OhttpConfigException(
         '$parameterName must use HTTPS scheme per RFC 9458 §1. '
         'Got scheme: "${uri.scheme}"',
+        stackTrace: StackTrace.current,
       );
     }
   }

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'exceptions.dart';
 
 /// Binary HTTP Messages (RFC 9292) — Known-Length framing.
 ///
@@ -63,7 +64,10 @@ Uint8List encodeVarint(int value) {
 
       return (value, 8);
     default:
-      throw StateError('unreachable');
+      throw OhttpFormatException(
+        'Unexpected varint prefix: ${first >> 6}',
+        stackTrace: StackTrace.current,
+      );
   }
 }
 
@@ -144,57 +148,70 @@ class BhttpResponse {
 
 /// Parse a Known-Length BHTTP response (RFC 9292).
 BhttpResponse parseResponse(Uint8List data) {
-  var offset = 0;
+  try {
+    var offset = 0;
 
-  // Framing indicator
-  final (framing, framingLen) = decodeVarint(data, offset);
-  offset += framingLen;
-  if (framing != 1) {
-    throw FormatException(
-      'Expected known-length response (framing=1), got $framing',
+    // Framing indicator
+    final (framing, framingLen) = decodeVarint(data, offset);
+    offset += framingLen;
+    if (framing != 1) {
+      throw OhttpFormatException(
+        'Expected known-length response (framing=1), got $framing',
+        stackTrace: StackTrace.current,
+      );
+    }
+
+    // Skip informational responses (1xx)
+    int statusCode;
+    int statusLen;
+    while (true) {
+      (statusCode, statusLen) = decodeVarint(data, offset);
+      offset += statusLen;
+
+      if (statusCode >= 100 && statusCode < 200) {
+        // Skip informational response header section
+        final (hLen, hLenLen) = decodeVarint(data, offset);
+        offset += hLenLen + hLen;
+      } else {
+        break;
+      }
+    }
+
+    // Header section
+    final (headersLen, headersLenLen) = decodeVarint(data, offset);
+    offset += headersLenLen;
+    final headersEnd = offset + headersLen;
+
+    final headers = <(String, String)>[];
+    while (offset < headersEnd) {
+      final (nameLen, nameLenLen) = decodeVarint(data, offset);
+      offset += nameLenLen;
+      final name = utf8.decode(data.sublist(offset, offset + nameLen));
+      offset += nameLen;
+
+      final (valueLen, valueLenLen) = decodeVarint(data, offset);
+      offset += valueLenLen;
+      final value = utf8.decode(data.sublist(offset, offset + valueLen));
+      offset += valueLen;
+
+      headers.add((name, value));
+    }
+
+    // Content
+    final (contentLen, contentLenLen) = decodeVarint(data, offset);
+    offset += contentLenLen;
+    final body = Uint8List.fromList(data.sublist(offset, offset + contentLen));
+
+    return BhttpResponse(statusCode: statusCode, headers: headers, body: body);
+  } on FormatException catch (e, st) {
+    throw OhttpFormatException(
+      'Malformed BHTTP response: ${e.message}',
+      stackTrace: st,
+    );
+  } on RangeError catch (e, st) {
+    throw OhttpFormatException(
+      'BHTTP response out of bounds: ${e.message}',
+      stackTrace: st,
     );
   }
-
-  // Skip informational responses (1xx)
-  int statusCode;
-  int statusLen;
-  while (true) {
-    (statusCode, statusLen) = decodeVarint(data, offset);
-    offset += statusLen;
-
-    if (statusCode >= 100 && statusCode < 200) {
-      // Skip informational response header section
-      final (hLen, hLenLen) = decodeVarint(data, offset);
-      offset += hLenLen + hLen;
-    } else {
-      break;
-    }
-  }
-
-  // Header section
-  final (headersLen, headersLenLen) = decodeVarint(data, offset);
-  offset += headersLenLen;
-  final headersEnd = offset + headersLen;
-
-  final headers = <(String, String)>[];
-  while (offset < headersEnd) {
-    final (nameLen, nameLenLen) = decodeVarint(data, offset);
-    offset += nameLenLen;
-    final name = utf8.decode(data.sublist(offset, offset + nameLen));
-    offset += nameLen;
-
-    final (valueLen, valueLenLen) = decodeVarint(data, offset);
-    offset += valueLenLen;
-    final value = utf8.decode(data.sublist(offset, offset + valueLen));
-    offset += valueLen;
-
-    headers.add((name, value));
-  }
-
-  // Content
-  final (contentLen, contentLenLen) = decodeVarint(data, offset);
-  offset += contentLenLen;
-  final body = Uint8List.fromList(data.sublist(offset, offset + contentLen));
-
-  return BhttpResponse(statusCode: statusCode, headers: headers, body: body);
 }

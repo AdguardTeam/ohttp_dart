@@ -90,9 +90,15 @@ void main() {
       await expectLater(session.send(request), throwsA(anything));
       expect(transport.fetchCount, 1);
 
-      transport.postError = Exception('network error');
+      transport.postError = OhttpNetworkException(
+        'Network error while posting to Gateway',
+        cause: Exception('connection refused'),
+      );
 
-      await expectLater(session.send(request), throwsA(isA<Exception>()));
+      await expectLater(
+        session.send(request),
+        throwsA(isA<OhttpNetworkException>()),
+      );
       // Cache is NOT invalidated — fetchCount stays at 1.
       expect(transport.fetchCount, 1);
     });

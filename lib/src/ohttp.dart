@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 
+import 'cipher_suite.dart';
+import 'exceptions.dart';
 import 'hpke.dart';
 
 // ---------------------------------------------------------------------------
@@ -42,11 +44,14 @@ class OhttpKeyConfig {
 
   /// Parses a binary OHTTP key configuration per RFC 9458 §3.
   ///
-  /// Throws [FormatException] if [data] is malformed.
+  /// Throws [OhttpKeyConfigException] if [data] is structurally malformed.
+  /// Throws [OhttpUnsupportedSuiteException] if no advertised cipher suite
+  /// is supported by this library.
   factory OhttpKeyConfig.parse(Uint8List data) {
     if (data.length < 7) {
-      throw FormatException(
+      throw OhttpKeyConfigException(
         'KeyConfig too short: ${data.length} bytes (min 7)',
+        stackTrace: StackTrace.current,
       );
     }
 
@@ -55,18 +60,24 @@ class OhttpKeyConfig {
     final kemId = (data[offset] << 8) | data[offset + 1];
     offset += 2;
 
-    // Public key length depends on KEM. For X25519 (0x0020) it's 32 bytes.
+    // Public key length depends on KEM. For X25519 it's 32 bytes.
     final int pkLen;
     switch (kemId) {
-      case 0x0020:
-        pkLen = 32;
+      case CipherSuite.kemX25519Sha256:
+        pkLen = CipherSuite.kemPublicKeyLength;
         break;
       default:
-        throw FormatException('Unsupported KEM: 0x${kemId.toRadixString(16)}');
+        throw OhttpUnsupportedSuiteException(
+          'Unsupported KEM: 0x${kemId.toRadixString(16)}',
+          stackTrace: StackTrace.current,
+        );
     }
 
     if (data.length < offset + pkLen + 2) {
-      throw const FormatException('KeyConfig too short for public key');
+      throw OhttpKeyConfigException(
+        'KeyConfig too short for public key',
+        stackTrace: StackTrace.current,
+      );
     }
     final publicKey = Uint8List.fromList(data.sublist(offset, offset + pkLen));
     offset += pkLen;
@@ -74,42 +85,80 @@ class OhttpKeyConfig {
     final symLen = (data[offset] << 8) | data[offset + 1];
     offset += 2;
 
-    if (symLen < 4 || data.length < offset + symLen) {
-      throw const FormatException('Invalid symmetric algorithms section');
+    // Validate: symLen must be >= 4, a multiple of 4 (each KDF+AEAD pair is 4 bytes),
+    // and the data must contain exactly enough bytes for the section — no trailing
+    // data is permitted after the symmetric algorithms section (RFC 9458 §3).
+    if (symLen < 4 || symLen % 4 != 0 || data.length != offset + symLen) {
+      throw OhttpKeyConfigException(
+        'Invalid symmetric algorithms section: '
+        'symLen=$symLen, data length ${data.length}, expected ${offset + symLen} '
+        '(must be >= 4, a multiple of 4, and have no trailing data)',
+        stackTrace: StackTrace.current,
+      );
     }
 
-    // Read first (and typically only) KDF+AEAD pair
-    final kdfId = (data[offset] << 8) | data[offset + 1];
-    offset += 2;
-    final aeadId = (data[offset] << 8) | data[offset + 1];
+    // Iterate through all KDF+AEAD pairs and select the first supported one.
+    // RFC 9458 §4.1 allows a gateway to advertise multiple pairs.
+    int? selectedKdfId;
+    int? selectedAeadId;
+    final symEnd = offset + symLen;
+
+    while (offset < symEnd) {
+      final pairKdfId = (data[offset] << 8) | data[offset + 1];
+      offset += 2;
+      final pairAeadId = (data[offset] << 8) | data[offset + 1];
+      offset += 2;
+
+      // Select first supported: HKDF-SHA256 + AES-128-GCM
+      if (selectedKdfId == null && pairKdfId == CipherSuite.kdfHkdfSha256 && pairAeadId == CipherSuite.aeadAes128Gcm) {
+        selectedKdfId = pairKdfId;
+        selectedAeadId = pairAeadId;
+        break;
+      }
+    }
+
+    if (selectedKdfId == null || selectedAeadId == null) {
+      throw OhttpUnsupportedSuiteException(
+        'No supported cipher suite found in KeyConfig '
+        '(expected KDF=HKDF-SHA256 0x${CipherSuite.kdfHkdfSha256.toRadixString(16)}, '
+        'AEAD=AES-128-GCM 0x${CipherSuite.aeadAes128Gcm.toRadixString(16)})',
+        stackTrace: StackTrace.current,
+      );
+    }
 
     return OhttpKeyConfig(
       keyId: keyId,
       kemId: kemId,
       publicKey: publicKey,
-      kdfId: kdfId,
-      aeadId: aeadId,
+      kdfId: selectedKdfId,
+      aeadId: selectedAeadId,
     );
   }
 
   /// Validates that the cipher suite is supported:
   /// X25519 (`0x0020`) + HKDF-SHA256 (`0x0001`) + AES-128-GCM (`0x0001`).
   ///
-  /// Throws [UnsupportedError] if any component is not supported.
+  /// Throws [OhttpUnsupportedSuiteException] if any component is not supported.
   void validate() {
-    if (kemId != 0x0020) {
-      throw UnsupportedError(
-        'Unsupported KEM: 0x${kemId.toRadixString(16)} (expected X25519 0x0020)',
+    if (kemId != CipherSuite.kemX25519Sha256) {
+      throw OhttpUnsupportedSuiteException(
+        'Unsupported KEM: 0x${kemId.toRadixString(16)} '
+        '(expected X25519 0x${CipherSuite.kemX25519Sha256.toRadixString(16)})',
+        stackTrace: StackTrace.current,
       );
     }
-    if (kdfId != 0x0001) {
-      throw UnsupportedError(
-        'Unsupported KDF: 0x${kdfId.toRadixString(16)} (expected HKDF-SHA256 0x0001)',
+    if (kdfId != CipherSuite.kdfHkdfSha256) {
+      throw OhttpUnsupportedSuiteException(
+        'Unsupported KDF: 0x${kdfId.toRadixString(16)} '
+        '(expected HKDF-SHA256 0x${CipherSuite.kdfHkdfSha256.toRadixString(16)})',
+        stackTrace: StackTrace.current,
       );
     }
-    if (aeadId != 0x0001) {
-      throw UnsupportedError(
-        'Unsupported AEAD: 0x${aeadId.toRadixString(16)} (expected AES-128-GCM 0x0001)',
+    if (aeadId != CipherSuite.aeadAes128Gcm) {
+      throw OhttpUnsupportedSuiteException(
+        'Unsupported AEAD: 0x${aeadId.toRadixString(16)} '
+        '(expected AES-128-GCM 0x${CipherSuite.aeadAes128Gcm.toRadixString(16)})',
+        stackTrace: StackTrace.current,
       );
     }
   }
@@ -138,10 +187,11 @@ class OhttpEncapsulateResult {
   });
 }
 
-// AES-128-GCM parameters
-const int _nk = 16;
-const int _nn = 12;
-const int _responseNonceLen = 16; // max(Nn, Nk)
+// OHTTP response nonce length = max(Nn, Nk) per RFC 9458 §4.6.2.
+// Derived from AEAD parameters: for AES-128-GCM, max(12, 16) = 16.
+const _responseNonceLen = CipherSuite.aeadKeyLength > CipherSuite.aeadNonceLength
+    ? CipherSuite.aeadKeyLength
+    : CipherSuite.aeadNonceLength;
 
 /// Encapsulate a BHTTP request via OHTTP (RFC 9458 §4.6.1).
 ///
@@ -196,8 +246,9 @@ Future<Uint8List> ohttpDecapsulate(
   Uint8List encResponse,
 ) async {
   if (encResponse.length <= _responseNonceLen) {
-    throw FormatException(
+    throw OhttpDecapsulationException(
       'Encrypted response too short: ${encResponse.length} bytes',
+      stackTrace: StackTrace.current,
     );
   }
 
@@ -215,31 +266,46 @@ Future<Uint8List> ohttpDecapsulate(
   final aeadKey = await HpkeSender.hkdfExpand(
     prk,
     Uint8List.fromList(utf8.encode('key')),
-    _nk,
+    CipherSuite.aeadKeyLength,
   );
 
   // nonce = HKDF-Expand(prk, "nonce", Nn)
   final aeadNonce = await HpkeSender.hkdfExpand(
     prk,
     Uint8List.fromList(utf8.encode('nonce')),
-    _nn,
+    CipherSuite.aeadNonceLength,
   );
 
   // AES-128-GCM decrypt with empty AAD
-  final tagLen = 16;
+  const tagLen = CipherSuite.aeadTagLength;
   if (ciphertext.length < tagLen) {
-    throw const FormatException('Ciphertext too short for AES-GCM tag');
+    throw OhttpDecapsulationException(
+      'Ciphertext too short for AES-GCM tag',
+      stackTrace: StackTrace.current,
+    );
   }
   final ct = ciphertext.sublist(0, ciphertext.length - tagLen);
   final tag = ciphertext.sublist(ciphertext.length - tagLen);
 
   final aesGcm = AesGcm.with128bits();
   final secretBox = SecretBox(ct, nonce: aeadNonce, mac: Mac(tag));
-  final plaintext = await aesGcm.decrypt(
-    secretBox,
-    secretKey: SecretKeyData(aeadKey),
-    aad: [],
-  );
+  final secretKey = SecretKeyData(aeadKey);
+  final List<int> plaintext;
+  try {
+    plaintext = await aesGcm.decrypt(
+      secretBox,
+      secretKey: secretKey,
+      aad: [],
+    );
+  } on Exception catch (e, st) {
+    throw OhttpCryptoException(
+      'Failed to decrypt OHTTP response',
+      cause: e,
+      stackTrace: st,
+    );
+  } finally {
+    secretKey.destroy();
+  }
 
   return Uint8List.fromList(plaintext);
 }
