@@ -37,7 +37,11 @@ class OhttpSession {
     int maxResponseBytes = _defaultMaxResponseBytes,
   }) : _transport = transport,
        _cache = cache,
-       _maxResponseBytes = maxResponseBytes;
+       _maxResponseBytes = maxResponseBytes {
+    if (maxResponseBytes <= 0) {
+      throw ArgumentError.value(maxResponseBytes, 'maxResponseBytes', 'must be positive');
+    }
+  }
 
   /// Shortcut that creates a [KeyConfigCache] over [transport] with the
   /// default TTL.
@@ -46,7 +50,11 @@ class OhttpSession {
     int maxResponseBytes = _defaultMaxResponseBytes,
   }) : _transport = transport,
        _cache = KeyConfigCache(transport: transport),
-       _maxResponseBytes = maxResponseBytes;
+       _maxResponseBytes = maxResponseBytes {
+    if (maxResponseBytes <= 0) {
+      throw ArgumentError.value(maxResponseBytes, 'maxResponseBytes', 'must be positive');
+    }
+  }
 
   /// Executes a full OHTTP round trip for [request].
   Future<OhttpResponseData> send(OhttpRequestData request) async {

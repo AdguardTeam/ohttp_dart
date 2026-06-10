@@ -162,6 +162,28 @@ void main() {
         throwsA(isA<OhttpSizeLimitException>()),
       );
     });
+
+    test('throws ArgumentError when maxResponseBytes is zero', () {
+      expect(
+        () => OhttpSession(
+          transport: transport,
+          cache: KeyConfigCache(transport: transport),
+          maxResponseBytes: 0,
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('throws ArgumentError when maxResponseBytes is negative', () {
+      expect(
+        () => OhttpSession(
+          transport: transport,
+          cache: KeyConfigCache(transport: transport),
+          maxResponseBytes: -1,
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
   });
 
   group('OhttpRequestData authority validation', () {
