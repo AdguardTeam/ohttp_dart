@@ -228,4 +228,118 @@ void main() {
       expect(resp.body, isEmpty);
     });
   });
+
+  group('decodeVarint boundary checks', () {
+    test('throws OhttpFormatException on truncated or out-of-bounds data', () {
+      // Empty data
+      expect(
+        () => decodeVarint(Uint8List(0), 0),
+        throwsA(isA<OhttpFormatException>()),
+      );
+
+      // Truncated 2-byte varint (0x40 indicates 2 bytes, only 1 provided)
+      expect(
+        () => decodeVarint(Uint8List.fromList([0x40]), 0),
+        throwsA(isA<OhttpFormatException>()),
+      );
+
+      // Truncated 4-byte varint (0x80 indicates 4 bytes, only 2 provided)
+      expect(
+        () => decodeVarint(Uint8List.fromList([0x80, 0x00]), 0),
+        throwsA(isA<OhttpFormatException>()),
+      );
+
+      // Truncated 8-byte varint (0xC0 indicates 8 bytes, only 4 provided)
+      expect(
+        () => decodeVarint(Uint8List.fromList([0xC0, 0x00, 0x00, 0x00]), 0),
+        throwsA(isA<OhttpFormatException>()),
+      );
+
+      // Offset exceeds data length
+      expect(
+        () => decodeVarint(Uint8List.fromList([0x05]), 10),
+        throwsA(isA<OhttpFormatException>()),
+      );
+    });
+  });
+
+  group('parseResponse validation', () {
+    test('throws OhttpFormatException on invalid status codes', () {
+      // Status code below 100
+      final buf1 = BytesBuilder();
+      buf1.add(encodeVarint(1));
+      buf1.add(encodeVarint(50));
+      buf1.add(encodeVarint(0));
+      buf1.add(encodeVarint(0));
+      expect(() => parseResponse(buf1.toBytes()), throwsA(isA<OhttpFormatException>()));
+
+      // Status code above 599
+      final buf2 = BytesBuilder();
+      buf2.add(encodeVarint(1));
+      buf2.add(encodeVarint(700));
+      buf2.add(encodeVarint(0));
+      buf2.add(encodeVarint(0));
+      expect(() => parseResponse(buf2.toBytes()), throwsA(isA<OhttpFormatException>()));
+    });
+
+    test('throws OhttpFormatException on status below 100 and above 599', () {
+      // Status code 50 (below 100)
+      final buf1 = BytesBuilder();
+      buf1.add(encodeVarint(1));
+      buf1.add(encodeVarint(50));
+      buf1.add(encodeVarint(0));
+      buf1.add(encodeVarint(0));
+      expect(() => parseResponse(buf1.toBytes()), throwsA(isA<OhttpFormatException>()));
+
+      // Status code 700 (above 599)
+      final buf2 = BytesBuilder();
+      buf2.add(encodeVarint(1));
+      buf2.add(encodeVarint(700));
+      buf2.add(encodeVarint(0));
+      buf2.add(encodeVarint(0));
+      expect(() => parseResponse(buf2.toBytes()), throwsA(isA<OhttpFormatException>()));
+    });
+
+    test('accepts boundary status codes 100 and 599', () {
+      // Status code 100 (informational, followed by final 200)
+      final buf1 = BytesBuilder();
+      buf1.add(encodeVarint(1));
+      buf1.add(encodeVarint(100));
+      buf1.add(encodeVarint(0));
+      buf1.add(encodeVarint(200));
+      buf1.add(encodeVarint(0));
+      buf1.add(encodeVarint(0));
+      expect(parseResponse(buf1.toBytes()).statusCode, 200);
+
+      // Status code 599
+      final buf2 = BytesBuilder();
+      buf2.add(encodeVarint(1));
+      buf2.add(encodeVarint(599));
+      buf2.add(encodeVarint(0));
+      buf2.add(encodeVarint(0));
+      expect(parseResponse(buf2.toBytes()).statusCode, 599);
+    });
+
+    test('throws OhttpFormatException on truncated response sections', () {
+      // Truncated: only framing indicator
+      final buf1 = BytesBuilder();
+      buf1.add(encodeVarint(1));
+      expect(() => parseResponse(buf1.toBytes()), throwsA(isA<OhttpFormatException>()));
+
+      // Truncated header section
+      final buf2 = BytesBuilder();
+      buf2.add(encodeVarint(1));
+      buf2.add(encodeVarint(200));
+      buf2.add(encodeVarint(100));
+      expect(() => parseResponse(buf2.toBytes()), throwsA(isA<OhttpFormatException>()));
+
+      // Truncated content
+      final buf3 = BytesBuilder();
+      buf3.add(encodeVarint(1));
+      buf3.add(encodeVarint(200));
+      buf3.add(encodeVarint(0));
+      buf3.add(encodeVarint(100));
+      expect(() => parseResponse(buf3.toBytes()), throwsA(isA<OhttpFormatException>()));
+    });
+  });
 }

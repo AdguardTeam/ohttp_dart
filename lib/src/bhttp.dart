@@ -43,31 +43,38 @@ Uint8List encodeVarint(int value) {
 /// Decode a QUIC variable-length integer at [offset] in [data].
 /// Returns (value, bytesConsumed).
 (int, int) decodeVarint(Uint8List data, int offset) {
-  final first = data[offset];
-  final prefix = first >> 6;
-  switch (prefix) {
-    case 0:
-      return (first & 0x3F, 1);
-    case 1:
-      return (((first & 0x3F) << 8) | data[offset + 1], 2);
-    case 2:
-      return (
-        ((first & 0x3F) << 24) | (data[offset + 1] << 16) | (data[offset + 2] << 8) | data[offset + 3],
-        4,
-      );
-    case 3:
-      // 8-byte varint — for our use cases this won't occur, but handle it
-      var value = (first & 0x3F);
-      for (var i = 1; i <= 7; i++) {
-        value = (value << 8) | data[offset + i];
-      }
+  try {
+    final first = data[offset];
+    final prefix = first >> 6;
+    switch (prefix) {
+      case 0:
+        return (first & 0x3F, 1);
+      case 1:
+        return (((first & 0x3F) << 8) | data[offset + 1], 2);
+      case 2:
+        return (
+          ((first & 0x3F) << 24) | (data[offset + 1] << 16) | (data[offset + 2] << 8) | data[offset + 3],
+          4,
+        );
+      case 3:
+        // 8-byte varint — for our use cases this won't occur, but handle it
+        var value = (first & 0x3F);
+        for (var i = 1; i <= 7; i++) {
+          value = (value << 8) | data[offset + i];
+        }
 
-      return (value, 8);
-    default:
-      throw OhttpFormatException(
-        'Unexpected varint prefix: ${first >> 6}',
-        stackTrace: StackTrace.current,
-      );
+        return (value, 8);
+      default:
+        throw OhttpFormatException(
+          'Unexpected varint prefix: ${first >> 6}',
+          stackTrace: StackTrace.current,
+        );
+    }
+  } on RangeError catch (e, st) {
+    throw OhttpFormatException(
+      'BHTTP varint: unexpected end of data at offset $offset (length ${data.length}): ${e.message}',
+      stackTrace: st,
+    );
   }
 }
 
@@ -175,6 +182,14 @@ BhttpResponse parseResponse(Uint8List data) {
       } else {
         break;
       }
+    }
+
+    // Validate final status code (RFC 9110 §15: 100-599)
+    if (statusCode < 100 || statusCode > 599) {
+      throw OhttpFormatException(
+        'BHTTP response: invalid status code $statusCode (expected 100-599)',
+        stackTrace: StackTrace.current,
+      );
     }
 
     // Header section
