@@ -117,6 +117,47 @@ void main() {
     });
   });
 
+  group('HttpClientTransport timeout validation', () {
+    final client = MockClient((request) async => Response.bytes(Uint8List(0), 200));
+    final keysUrl = Uri.parse(httpsKeysUrl);
+    final gatewayUrl = Uri.parse(httpsGatewayUrl);
+
+    test('rejects negative or zero Duration for either timeout', () {
+      for (final invalid in [Duration.zero, const Duration(seconds: -1)]) {
+        expect(
+          () => HttpClientTransport(
+            client: client,
+            keysUrl: keysUrl,
+            gatewayUrl: gatewayUrl,
+            fetchKeyConfigTimeout: invalid,
+          ),
+          throwsA(isA<ArgumentError>()),
+          reason: 'fetchKeyConfigTimeout = $invalid',
+        );
+        expect(
+          () => HttpClientTransport(
+            client: client,
+            keysUrl: keysUrl,
+            gatewayUrl: gatewayUrl,
+            postToGatewayTimeout: invalid,
+          ),
+          throwsA(isA<ArgumentError>()),
+          reason: 'postToGatewayTimeout = $invalid',
+        );
+        expect(
+          () => HttpClientTransport.insecureForTesting(
+            client: client,
+            keysUrl: Uri.parse('http://localhost/ohttp/config'),
+            gatewayUrl: Uri.parse('http://localhost/ohttp/gateway'),
+            fetchKeyConfigTimeout: invalid,
+          ),
+          throwsA(isA<ArgumentError>()),
+          reason: 'insecureForTesting fetchKeyConfigTimeout = $invalid',
+        );
+      }
+    });
+  });
+
   group('HttpClientTransport', () {
     const keysUrl = 'http://localhost/ohttp/config';
     const gatewayUrl = 'http://localhost/ohttp/gateway';

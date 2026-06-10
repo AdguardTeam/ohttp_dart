@@ -16,10 +16,32 @@ class HttpClientTransport implements OhttpTransport {
   static const _ohttpMediaType = 'message/ohttp-req';
   static const _defaultTimeout = Duration(seconds: 30);
 
+  static Duration _validateDuration(Duration value, String name) {
+    if (value <= Duration.zero) {
+      throw ArgumentError.value(value, name, 'must be greater than Duration.zero');
+    }
+
+    return value;
+  }
+
+  static Uri _validateHttpsScheme(Uri uri, String parameterName) {
+    if (uri.scheme != 'https') {
+      throw OhttpConfigException(
+        '$parameterName must use HTTPS scheme per RFC 9458 §1. '
+        'Got scheme: "${uri.scheme}"',
+        stackTrace: StackTrace.current,
+      );
+    }
+
+    return uri;
+  }
+
   final http.Client _client;
   final Uri _keysUrl;
   final Uri _gatewayUrl;
+
   final Duration _fetchKeyConfigTimeout;
+
   final Duration _postToGatewayTimeout;
 
   /// Creates an HTTP client transport for OHTTP.
@@ -42,13 +64,10 @@ class HttpClientTransport implements OhttpTransport {
     Duration fetchKeyConfigTimeout = _defaultTimeout,
     Duration postToGatewayTimeout = _defaultTimeout,
   }) : _client = client,
-       _keysUrl = keysUrl,
-       _gatewayUrl = gatewayUrl,
-       _fetchKeyConfigTimeout = fetchKeyConfigTimeout,
-       _postToGatewayTimeout = postToGatewayTimeout {
-    _validateHttpsScheme(keysUrl, 'keysUrl');
-    _validateHttpsScheme(gatewayUrl, 'gatewayUrl');
-  }
+       _keysUrl = _validateHttpsScheme(keysUrl, 'keysUrl'),
+       _gatewayUrl = _validateHttpsScheme(gatewayUrl, 'gatewayUrl'),
+       _fetchKeyConfigTimeout = _validateDuration(fetchKeyConfigTimeout, 'fetchKeyConfigTimeout'),
+       _postToGatewayTimeout = _validateDuration(postToGatewayTimeout, 'postToGatewayTimeout');
 
   /// Creates an HTTP client transport without HTTPS scheme validation.
   ///
@@ -64,8 +83,8 @@ class HttpClientTransport implements OhttpTransport {
   }) : _client = client,
        _keysUrl = keysUrl,
        _gatewayUrl = gatewayUrl,
-       _fetchKeyConfigTimeout = fetchKeyConfigTimeout,
-       _postToGatewayTimeout = postToGatewayTimeout;
+       _fetchKeyConfigTimeout = _validateDuration(fetchKeyConfigTimeout, 'fetchKeyConfigTimeout'),
+       _postToGatewayTimeout = _validateDuration(postToGatewayTimeout, 'postToGatewayTimeout');
 
   @override
   Future<Uint8List> fetchKeyConfig() async {
@@ -137,15 +156,5 @@ class HttpClientTransport implements OhttpTransport {
     }
 
     return response.bodyBytes;
-  }
-
-  void _validateHttpsScheme(Uri uri, String parameterName) {
-    if (uri.scheme != 'https') {
-      throw OhttpConfigException(
-        '$parameterName must use HTTPS scheme per RFC 9458 §1. '
-        'Got scheme: "${uri.scheme}"',
-        stackTrace: StackTrace.current,
-      );
-    }
   }
 }
