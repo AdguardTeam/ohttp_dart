@@ -5,6 +5,7 @@ import 'package:cryptography/cryptography.dart';
 
 import 'cipher_suite.dart';
 import 'exceptions.dart';
+import 'wipe_bytes_extension.dart';
 
 /// HPKE Base Mode Sender (RFC 9180) for the cipher suite:
 ///   KEM = DHKEM(X25519, HKDF-SHA256) (0x0020)
@@ -351,9 +352,9 @@ class HpkeSenderContext {
   /// The `enc` (public key) is NOT zeroed — it is an ephemeral public key
   /// transmitted in the clear in the encapsulated request.
   void dispose() {
-    key.fillRange(0, key.length, 0);
-    baseNonce.fillRange(0, baseNonce.length, 0);
-    exporterSecret.fillRange(0, exporterSecret.length, 0);
+    key.wipeBytes();
+    baseNonce.wipeBytes();
+    exporterSecret.wipeBytes();
   }
 
   /// Computes nonce = base_nonce XOR I2OSP(seq, Nn) and increments seq.
