@@ -134,7 +134,10 @@ void main() {
       buf.add(encodeVarint(body.length));
       buf.add(body);
 
-      final resp = parseResponse(buf.toBytes());
+      final resp = parseResponse(
+        buf.toBytes(),
+        limits: const BhttpResponseLimits(),
+      );
       expect(resp.statusCode, 200);
       expect(resp.headers, isEmpty);
       expect(utf8.decode(resp.body), 'OK');
@@ -163,7 +166,10 @@ void main() {
       buf.add(encodeVarint(body.length));
       buf.add(body);
 
-      final resp = parseResponse(buf.toBytes());
+      final resp = parseResponse(
+        buf.toBytes(),
+        limits: const BhttpResponseLimits(),
+      );
       expect(resp.statusCode, 200);
       expect(resp.headers.length, 1);
       expect(resp.headers[0].$1, 'content-type');
@@ -179,7 +185,10 @@ void main() {
       buf.add(encodeVarint(0));
 
       expect(
-        () => parseResponse(buf.toBytes()),
+        () => parseResponse(
+          buf.toBytes(),
+          limits: const BhttpResponseLimits(),
+        ),
         throwsA(isA<OhttpFormatException>()),
       );
     });
@@ -211,7 +220,10 @@ void main() {
       buf.add(encodeVarint(body.length));
       buf.add(body);
 
-      final resp = parseResponse(buf.toBytes());
+      final resp = parseResponse(
+        buf.toBytes(),
+        limits: const BhttpResponseLimits(),
+      );
       expect(resp.statusCode, 404);
       expect(utf8.decode(resp.body), 'Not Found');
     });
@@ -223,7 +235,10 @@ void main() {
       buf.add(encodeVarint(0));
       buf.add(encodeVarint(0)); // empty content
 
-      final resp = parseResponse(buf.toBytes());
+      final resp = parseResponse(
+        buf.toBytes(),
+        limits: const BhttpResponseLimits(),
+      );
       expect(resp.statusCode, 204);
       expect(resp.body, isEmpty);
     });
@@ -264,24 +279,6 @@ void main() {
   });
 
   group('parseResponse validation', () {
-    test('throws OhttpFormatException on invalid status codes', () {
-      // Status code below 100
-      final buf1 = BytesBuilder();
-      buf1.add(encodeVarint(1));
-      buf1.add(encodeVarint(50));
-      buf1.add(encodeVarint(0));
-      buf1.add(encodeVarint(0));
-      expect(() => parseResponse(buf1.toBytes()), throwsA(isA<OhttpFormatException>()));
-
-      // Status code above 599
-      final buf2 = BytesBuilder();
-      buf2.add(encodeVarint(1));
-      buf2.add(encodeVarint(700));
-      buf2.add(encodeVarint(0));
-      buf2.add(encodeVarint(0));
-      expect(() => parseResponse(buf2.toBytes()), throwsA(isA<OhttpFormatException>()));
-    });
-
     test('throws OhttpFormatException on status below 100 and above 599', () {
       // Status code 50 (below 100)
       final buf1 = BytesBuilder();
@@ -289,7 +286,13 @@ void main() {
       buf1.add(encodeVarint(50));
       buf1.add(encodeVarint(0));
       buf1.add(encodeVarint(0));
-      expect(() => parseResponse(buf1.toBytes()), throwsA(isA<OhttpFormatException>()));
+      expect(
+        () => parseResponse(
+          buf1.toBytes(),
+          limits: const BhttpResponseLimits(),
+        ),
+        throwsA(isA<OhttpFormatException>()),
+      );
 
       // Status code 700 (above 599)
       final buf2 = BytesBuilder();
@@ -297,7 +300,13 @@ void main() {
       buf2.add(encodeVarint(700));
       buf2.add(encodeVarint(0));
       buf2.add(encodeVarint(0));
-      expect(() => parseResponse(buf2.toBytes()), throwsA(isA<OhttpFormatException>()));
+      expect(
+        () => parseResponse(
+          buf2.toBytes(),
+          limits: const BhttpResponseLimits(),
+        ),
+        throwsA(isA<OhttpFormatException>()),
+      );
     });
 
     test('accepts boundary status codes 100 and 599', () {
@@ -309,7 +318,13 @@ void main() {
       buf1.add(encodeVarint(200));
       buf1.add(encodeVarint(0));
       buf1.add(encodeVarint(0));
-      expect(parseResponse(buf1.toBytes()).statusCode, 200);
+      expect(
+        parseResponse(
+          buf1.toBytes(),
+          limits: const BhttpResponseLimits(),
+        ).statusCode,
+        200,
+      );
 
       // Status code 599
       final buf2 = BytesBuilder();
@@ -317,21 +332,39 @@ void main() {
       buf2.add(encodeVarint(599));
       buf2.add(encodeVarint(0));
       buf2.add(encodeVarint(0));
-      expect(parseResponse(buf2.toBytes()).statusCode, 599);
+      expect(
+        parseResponse(
+          buf2.toBytes(),
+          limits: const BhttpResponseLimits(),
+        ).statusCode,
+        599,
+      );
     });
 
     test('throws OhttpFormatException on truncated response sections', () {
       // Truncated: only framing indicator
       final buf1 = BytesBuilder();
       buf1.add(encodeVarint(1));
-      expect(() => parseResponse(buf1.toBytes()), throwsA(isA<OhttpFormatException>()));
+      expect(
+        () => parseResponse(
+          buf1.toBytes(),
+          limits: const BhttpResponseLimits(),
+        ),
+        throwsA(isA<OhttpFormatException>()),
+      );
 
       // Truncated header section
       final buf2 = BytesBuilder();
       buf2.add(encodeVarint(1));
       buf2.add(encodeVarint(200));
       buf2.add(encodeVarint(100));
-      expect(() => parseResponse(buf2.toBytes()), throwsA(isA<OhttpFormatException>()));
+      expect(
+        () => parseResponse(
+          buf2.toBytes(),
+          limits: const BhttpResponseLimits(),
+        ),
+        throwsA(isA<OhttpFormatException>()),
+      );
 
       // Truncated content
       final buf3 = BytesBuilder();
@@ -339,7 +372,72 @@ void main() {
       buf3.add(encodeVarint(200));
       buf3.add(encodeVarint(0));
       buf3.add(encodeVarint(100));
-      expect(() => parseResponse(buf3.toBytes()), throwsA(isA<OhttpFormatException>()));
+      expect(
+        () => parseResponse(
+          buf3.toBytes(),
+          limits: const BhttpResponseLimits(),
+        ),
+        throwsA(isA<OhttpFormatException>()),
+      );
+    });
+  });
+
+  group('parseResponse size validation', () {
+    test('throws OhttpSizeLimitException when response headers exceed limit', () {
+      final buf = BytesBuilder();
+      buf.add(encodeVarint(1)); // framing
+      buf.add(encodeVarint(200)); // status
+
+      // Create large header section
+      final headerBuf = BytesBuilder();
+      final name = utf8.encode('x-custom');
+      headerBuf.add(encodeVarint(name.length));
+      headerBuf.add(name);
+      final value = utf8.encode('A' * 20000);
+      headerBuf.add(encodeVarint(value.length));
+      headerBuf.add(value);
+      final headerBytes = headerBuf.toBytes();
+      buf.add(encodeVarint(headerBytes.length));
+      buf.add(headerBytes);
+
+      buf.add(encodeVarint(0)); // empty body
+
+      expect(
+        () => parseResponse(
+          buf.toBytes(),
+          limits: const BhttpResponseLimits(maxHeaderBytes: 1000),
+        ),
+        throwsA(
+          isA<OhttpSizeLimitException>()
+              .having((e) => e.limit, 'limit', 1000)
+              .having((e) => e.message, 'message', contains('headers')),
+        ),
+      );
+    });
+
+    test('throws OhttpSizeLimitException when response body exceeds limit', () {
+      final buf = BytesBuilder();
+      buf.add(encodeVarint(1)); // framing
+      buf.add(encodeVarint(200)); // status
+      buf.add(encodeVarint(0)); // empty headers
+
+      // Large body
+      final body = Uint8List(20 * 1024 * 1024); // 20 MB
+      buf.add(encodeVarint(body.length));
+      buf.add(body);
+
+      expect(
+        () => parseResponse(
+          buf.toBytes(),
+          limits: const BhttpResponseLimits(maxBodyBytes: 5 * 1024 * 1024), // 5 MB
+        ),
+        throwsA(
+          isA<OhttpSizeLimitException>()
+              .having((e) => e.limit, 'limit', 5 * 1024 * 1024)
+              .having((e) => e.actualSize, 'actualSize', 20 * 1024 * 1024)
+              .having((e) => e.message, 'message', contains('body')),
+        ),
+      );
     });
   });
 }
