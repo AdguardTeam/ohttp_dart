@@ -7,8 +7,10 @@ Pure Dart implementation of [Oblivious HTTP (RFC 9458)](https://www.ietf.org/rfc
 - **OHTTP encapsulation / decapsulation** (RFC 9458)
 - **HPKE Base Mode Sender** (RFC 9180) — hand-written from crypto primitives
 - **Binary HTTP** (RFC 9292) — serialize/parse HTTP messages
-- **Transport-agnostic core** — no HTTP-client dependency in the core library
-- **Optional `package:http` adapter** — drop-in `http.Client` replacement
+- **Transport-agnostic core** — plug in any HTTP client via the `OhttpTransport` interface
+- **`package:http` adapter** — drop-in `http.BaseClient` replacement
+- **TTL-based key config cache** with single-flight deduplication
+- **Configurable size limits** for encrypted and decrypted responses
 
 **Cipher suite:** DHKEM(X25519, HKDF-SHA256) + HKDF-SHA256 + AES-128-GCM
 
@@ -16,7 +18,7 @@ Pure Dart implementation of [Oblivious HTTP (RFC 9458)](https://www.ietf.org/rfc
 
 ```
 package:ohttp_dart/ohttp_dart.dart   ← core (transport-agnostic)
-package:ohttp_dart/http.dart         ← optional package:http adapter
+package:ohttp_dart/http.dart         ← package:http adapter
 ```
 
 The core library defines abstractions (`OhttpTransport`, `OhttpSession`,
@@ -24,26 +26,31 @@ The core library defines abstractions (`OhttpTransport`, `OhttpSession`,
 adapter provides `HttpClientTransport` and `OhttpHttpClient` for
 consumers using `package:http`.
 
+`OhttpSession` orchestrates the full pipeline: cache lookup → BHTTP
+serialization → OHTTP encapsulation → transport call → decapsulation →
+BHTTP parsing. Cache invalidation happens automatically on gateway errors.
+
 ## Project Structure
 
 ```
 lib/
-├── ohttp_dart.dart              # Core library entry point
-├── http.dart                    # Optional http adapter entry point
+├── ohttp_dart.dart                     # Core library entry point
+├── http.dart                           # Optional http adapter entry point
 └── src/
-    ├── bhttp.dart               # Binary HTTP (RFC 9292)
-    ├── hpke.dart                # HPKE Base Mode Sender (RFC 9180)
-    ├── ohttp.dart               # OHTTP encap/decap + KeyConfig (RFC 9458)
-    ├── ohttp_transport.dart     # Transport abstraction interface
-    ├── ohttp_data.dart          # Request / response data types
-    ├── key_config_cache.dart    # TTL cache with single-flight
-    ├── ohttp_session.dart       # OHTTP session orchestrator
-    ├── cipher_suite.dart        # Cipher suite constants
-    ├── exceptions.dart          # Typed exception hierarchy
+    ├── bhttp.dart                      # Binary HTTP (RFC 9292)
+    ├── bhttp_response_limits.dart      # Response size limits configuration
+    ├── cipher_suite.dart               # Cipher suite constants
+    ├── exceptions.dart                 # Sealed exception hierarchy
+    ├── hpke.dart                       # HPKE Base Mode Sender (RFC 9180)
+    ├── key_config_cache.dart           # TTL cache with single-flight
+    ├── ohttp.dart                      # OHTTP encap/decap + KeyConfig (RFC 9458)
+    ├── ohttp_data.dart                 # Request / response data types
+    ├── ohttp_session.dart              # OHTTP session orchestrator
+    ├── ohttp_transport.dart            # Transport abstraction interface
     └── adapters/
         └── http/
             ├── http_client_transport.dart  # HttpClientTransport
-            └── ohttp_http_client.dart      # OhttpHttpClient
+            └── ohttp_http_client.dart      # OhttpHttpClient (BaseClient)
 ```
 
 ## Error Handling
@@ -66,16 +73,18 @@ Specific exception types:
 |---|---|
 | `OhttpConfigException` | Invalid request/URL config (non-HTTPS scheme, bad authority) |
 | `OhttpUnsupportedSuiteException` | KeyConfig advertises only unsupported KEM/KDF/AEAD |
-| `OhttpKeyConfigException` | Structurally malformed KeyConfig (bad symLen, trailing data) |
-| `OhttpFormatException` | Malformed BHTTP / varint in the decrypted response |
-| `OhttpGatewayException` | Gateway returned non-2xx response (includes `statusCode`) |
-| `OhttpDecapsulationException` | Response too short / ciphertext too short for the GCM tag |
+| `OhttpKeyConfigException` | Structurally malformed KeyConfig binary data (too short, wrong lengths, trailing data) |
+| `OhttpFormatException` | Malformed BHTTP data (wrong framing indicator, truncated fields, invalid varint) |
+| `OhttpGatewayException` | Gateway returned non-2xx response (includes `statusCode`; triggers cache invalidation) |
+| `OhttpDecapsulationException` | OHTTP response decapsulation failure (response too short, ciphertext too short for GCM tag) |
 | `OhttpCryptoException` | AES-GCM / HPKE crypto failure (wraps underlying `cause`) |
-| `OhttpNetworkException` | DNS failure, connection refused, timeout (wraps underlying `cause`) |
+| `OhttpSizeLimitException` | Response exceeds configured size limits (includes `limit` and `actualSize`) |
+| `OhttpNetworkException` | Network-level error — DNS, connection refused, etc. (wraps underlying `cause`) |
+| `OhttpTimeoutException` | HTTP request exceeded configured timeout (includes `timeout` duration and `url`) |
 
 ## Usage
 
-### Quick-start: drop-in `http.Client`
+### Quick-start: drop-in `http.BaseClient`
 
 ```dart
 import 'package:http/http.dart' as http;
@@ -92,7 +101,7 @@ final session = OhttpSession.withTransport(transport: transport);
 final client = OhttpHttpClient(session: session, closeWith: raw);
 
 final response = await client.get(Uri.https('target.example.com', '/api/data'));
-// Use response as a standard http.Response
+// Use response as a standard http.StreamedResponse
 client.close();
 ```
 
@@ -105,16 +114,91 @@ final request = OhttpRequestData(
   scheme: 'https',
   authority: 'target.example.com',
   path: '/api/data',
+  headers: [('accept', 'application/json')],
 );
 final response = await session.send(request);
 ```
 
+### Session configuration
+
+`OhttpSession` supports configurable limits for response sizes:
+
+```dart
+final session = OhttpSession.withTransport(
+  transport: transport,
+  maxEncryptedResponseBytes: 32 * 1024 * 1024, // 32 MiB (default: 16 MiB)
+  decryptedResponseLimits: BhttpResponseLimits(
+    maxHeaderBytes: 32 * 1024,  // 32 KiB (default: 16 KiB)
+    maxBodyBytes: 20 * 1024 * 1024, // 20 MiB (default: 10 MiB)
+  ),
+);
+```
+
+For full control over the cache, use the primary constructor:
+
+```dart
+final cache = KeyConfigCache(
+  transport: transport,
+  ttl: Duration(hours: 2),
+);
+final session = OhttpSession(
+  transport: transport,
+  cache: cache,
+  maxEncryptedResponseBytes: 32 * 1024 * 1024,
+);
+```
+
+### Transport configuration
+
+`HttpClientTransport` enforces HTTPS per RFC 9458 §1 and supports
+configurable timeouts:
+
+```dart
+final transport = HttpClientTransport(
+  client: httpClient,
+  keysUrl: Uri.parse('https://gateway.example.com/ohttp/config'),
+  gatewayUrl: Uri.parse('https://gateway.example.com/ohttp/gateway'),
+  fetchKeyConfigTimeout: Duration(seconds: 10),  // default: 30s
+  postToGatewayTimeout: Duration(seconds: 15),   // default: 30s
+);
+```
+
+For testing with non-HTTPS endpoints (e.g., `MockClient` with `http://localhost`):
+
+```dart
+final transport = HttpClientTransport.insecureForTesting(
+  client: mockClient,
+  keysUrl: Uri.parse('http://localhost:8080/keys'),
+  gatewayUrl: Uri.parse('http://localhost:8080/gateway'),
+);
+```
+
+### Custom transport
+
+Implement `OhttpTransport` to integrate with any HTTP client (Dio, etc.):
+
+```dart
+class DioTransport implements OhttpTransport {
+  @override
+  Future<Uint8List> fetchKeyConfig() async {
+    // GET the key config URL, throw OhttpGatewayException on non-2xx
+  }
+
+  @override
+  Future<Uint8List> postToGateway(Uint8List body) async {
+    // POST to gateway with Content-Type: message/ohttp-req
+    // throw OhttpGatewayException on non-2xx
+  }
+}
+```
+
 ## Dependencies
 
-| Package | Purpose |
-|---------|---------|
-| `cryptography` 2.9.0 | Pure Dart crypto primitives (X25519, HMAC, AES-GCM) |
-| `http` 1.6.0 | HTTP client for gateway communication |
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `cryptography` | 2.9.0 | Pure Dart crypto primitives (X25519, HMAC, AES-GCM) |
+| `http` | 1.6.0 | HTTP client for the `package:http` adapter |
+| `meta` | 1.16.0 | Annotations (`@visibleForTesting`) |
 
 ## Testing
 
@@ -122,4 +206,8 @@ final response = await session.send(request);
 dart test
 ```
 
-Tests cover RFC test vectors for HPKE (RFC 9180 Appendix A.1), HKDF (RFC 5869), and BHTTP encoding.
+Tests cover RFC test vectors for HPKE (RFC 9180 Appendix A.1), HKDF (RFC 5869), OHTTP encapsulation/decapsulation, and BHTTP encoding/decoding.
+
+## License
+
+See [LICENSE](LICENSE).
