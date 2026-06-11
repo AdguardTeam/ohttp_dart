@@ -198,7 +198,6 @@ class DioTransport implements OhttpTransport {
 |---------|---------|---------|
 | `cryptography` | 2.9.0 | Pure Dart crypto primitives (X25519, HMAC, AES-GCM) |
 | `http` | 1.6.0 | HTTP client for the `package:http` adapter |
-| `meta` | 1.16.0 | Annotations (`@visibleForTesting`) |
 
 ## Testing
 
