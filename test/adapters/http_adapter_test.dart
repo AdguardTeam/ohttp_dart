@@ -131,7 +131,7 @@ void main() {
             gatewayUrl: gatewayUrl,
             fetchKeyConfigTimeout: invalid,
           ),
-          throwsA(isA<ArgumentError>()),
+          throwsA(isA<OhttpConfigException>()),
           reason: 'fetchKeyConfigTimeout = $invalid',
         );
         expect(
@@ -141,7 +141,7 @@ void main() {
             gatewayUrl: gatewayUrl,
             postToGatewayTimeout: invalid,
           ),
-          throwsA(isA<ArgumentError>()),
+          throwsA(isA<OhttpConfigException>()),
           reason: 'postToGatewayTimeout = $invalid',
         );
         expect(
@@ -151,7 +151,7 @@ void main() {
             gatewayUrl: Uri.parse('http://localhost/ohttp/gateway'),
             fetchKeyConfigTimeout: invalid,
           ),
-          throwsA(isA<ArgumentError>()),
+          throwsA(isA<OhttpConfigException>()),
           reason: 'insecureForTesting fetchKeyConfigTimeout = $invalid',
         );
       }

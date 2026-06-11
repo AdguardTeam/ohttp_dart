@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'bhttp_response_limits.dart';
 import 'exceptions.dart';
 
 /// Binary HTTP Messages (RFC 9292) — Known-Length framing.
@@ -154,7 +155,10 @@ class BhttpResponse {
 }
 
 /// Parse a Known-Length BHTTP response (RFC 9292).
-BhttpResponse parseResponse(Uint8List data) {
+///
+/// Throws [OhttpFormatException] on structural errors.
+/// Throws [OhttpSizeLimitException] if header section or body exceeds [limits].
+BhttpResponse parseResponse(Uint8List data, {required BhttpResponseLimits limits}) {
   try {
     var offset = 0;
 
@@ -197,6 +201,15 @@ BhttpResponse parseResponse(Uint8List data) {
     offset += headersLenLen;
     final headersEnd = offset + headersLen;
 
+    // Validate header section size
+    if (headersLen > limits.maxHeaderBytes) {
+      throw OhttpSizeLimitException(
+        message: 'Response headers size exceeds limit',
+        limit: limits.maxHeaderBytes,
+        actualSize: headersLen,
+      );
+    }
+
     final headers = <(String, String)>[];
     while (offset < headersEnd) {
       final (nameLen, nameLenLen) = decodeVarint(data, offset);
@@ -215,6 +228,16 @@ BhttpResponse parseResponse(Uint8List data) {
     // Content
     final (contentLen, contentLenLen) = decodeVarint(data, offset);
     offset += contentLenLen;
+
+    // Validate content size
+    if (contentLen > limits.maxBodyBytes) {
+      throw OhttpSizeLimitException(
+        message: 'Response body size exceeds limit',
+        limit: limits.maxBodyBytes,
+        actualSize: contentLen,
+      );
+    }
+
     final body = Uint8List.fromList(data.sublist(offset, offset + contentLen));
 
     return BhttpResponse(statusCode: statusCode, headers: headers, body: body);

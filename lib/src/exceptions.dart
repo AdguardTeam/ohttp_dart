@@ -116,13 +116,14 @@ class OhttpTimeoutException extends OhttpNetworkException {
   final Uri? url;
 
   const OhttpTimeoutException({
+    super.stackTrace,
     required String message,
     required this.timeout,
     this.url,
   }) : super(message);
 
   @override
-  String toString() {
+  String get baseMessage {
     final urlPart = url != null ? ' for $url' : '';
 
     return 'OhttpTimeoutException: $message$urlPart (timeout: ${timeout.inSeconds}s)';

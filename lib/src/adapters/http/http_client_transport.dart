@@ -18,7 +18,9 @@ class HttpClientTransport implements OhttpTransport {
 
   static Duration _validateDuration(Duration value, String name) {
     if (value <= Duration.zero) {
-      throw ArgumentError.value(value, name, 'must be greater than Duration.zero');
+      throw OhttpConfigException(
+        '$name must be greater than Duration.zero, got $value',
+      );
     }
 
     return value;
