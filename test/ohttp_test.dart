@@ -331,4 +331,22 @@ void main() {
       );
     });
   });
+
+  group('OhttpEncapsulateResult.dispose', () {
+    test('zeroes enc and exportedSecret', () {
+      final result = OhttpEncapsulateResult(
+        encRequest: Uint8List(0),
+        enc: Uint8List.fromList([1, 2, 3, 4]),
+        exportedSecret: Uint8List.fromList([5, 6, 7, 8]),
+      );
+
+      expect(result.enc.any((b) => b != 0), isTrue);
+      expect(result.exportedSecret.any((b) => b != 0), isTrue);
+
+      result.dispose();
+
+      expect(result.enc.every((b) => b == 0), isTrue);
+      expect(result.exportedSecret.every((b) => b == 0), isTrue);
+    });
+  });
 }
