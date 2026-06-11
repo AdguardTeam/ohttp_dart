@@ -295,4 +295,47 @@ void main() {
       expect(okm.length, 32);
     });
   });
+
+  group('HpkeSenderContext.dispose', () {
+    test('zeroes key, baseNonce, exporterSecret', () async {
+      final x = X25519();
+      final kp = await x.newKeyPair();
+      final pk = await kp.extractPublicKey();
+
+      final ctx = await HpkeSender.setupBaseS(
+        Uint8List.fromList(pk.bytes),
+        Uint8List.fromList(utf8.encode('test')),
+      );
+
+      // Verify data is non-zero before dispose
+      expect(ctx.key.any((b) => b != 0), isTrue);
+      expect(ctx.baseNonce.any((b) => b != 0), isTrue);
+      expect(ctx.exporterSecret.any((b) => b != 0), isTrue);
+
+      ctx.dispose();
+
+      // Verify data is zeroed
+      expect(ctx.key.every((b) => b == 0), isTrue);
+      expect(ctx.baseNonce.every((b) => b == 0), isTrue);
+      expect(ctx.exporterSecret.every((b) => b == 0), isTrue);
+    });
+
+    test('does not zero enc (public key)', () async {
+      final x = X25519();
+      final kp = await x.newKeyPair();
+      final pk = await kp.extractPublicKey();
+
+      final ctx = await HpkeSender.setupBaseS(
+        Uint8List.fromList(pk.bytes),
+        Uint8List.fromList(utf8.encode('test')),
+      );
+
+      final encBefore = Uint8List.fromList(ctx.enc);
+
+      ctx.dispose();
+
+      // enc must remain unchanged
+      expect(ctx.enc, encBefore);
+    });
+  });
 }

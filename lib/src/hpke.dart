@@ -347,6 +347,15 @@ class HpkeSenderContext {
     length,
   );
 
+  /// Zeroes out sensitive cryptographic data (key, base_nonce, exporter secret).
+  /// The `enc` (public key) is NOT zeroed — it is an ephemeral public key
+  /// transmitted in the clear in the encapsulated request.
+  void dispose() {
+    key.fillRange(0, key.length, 0);
+    baseNonce.fillRange(0, baseNonce.length, 0);
+    exporterSecret.fillRange(0, exporterSecret.length, 0);
+  }
+
   /// Computes nonce = base_nonce XOR I2OSP(seq, Nn) and increments seq.
   /// Matches BouncyCastle AEAD.computeNonce() (RFC 9180 §5.2).
   Uint8List _computeNonce() {
