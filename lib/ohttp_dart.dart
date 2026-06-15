@@ -14,5 +14,6 @@ export 'src/hpke.dart';
 export 'src/key_config_cache.dart';
 export 'src/ohttp.dart';
 export 'src/ohttp_data.dart';
+export 'src/ohttp_observer.dart';
 export 'src/ohttp_session.dart';
 export 'src/ohttp_transport.dart';
