@@ -238,7 +238,7 @@ void main() {
       );
     });
 
-    test('fetchKeyConfig throws OhttpNetworkException on timeout', () async {
+    test('fetchKeyConfig throws OhttpTimeoutException on timeout', () async {
       final client = MockClient((request) async {
         await Future<void>.delayed(const Duration(seconds: 2));
 

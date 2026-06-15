@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
+import 'package:meta/meta.dart';
 import 'package:ohttp_dart/src/exceptions.dart';
 import 'package:ohttp_dart/src/ohttp_transport.dart';
 
@@ -74,6 +75,7 @@ class HttpClientTransport implements OhttpTransport {
   ///
   /// This constructor is intended **exclusively for testing scenarios**
   /// (e.g., MockClient with http://localhost). Production code MUST NOT use it.
+  @visibleForTesting
   HttpClientTransport.insecureForTesting({
     required http.Client client,
     required Uri keysUrl,
