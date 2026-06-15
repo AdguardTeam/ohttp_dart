@@ -204,7 +204,7 @@ BhttpResponse parseResponse(Uint8List data, {required BhttpResponseLimits limits
     // Validate header section size
     if (headersLen > limits.maxHeaderBytes) {
       throw OhttpSizeLimitException(
-        message: 'Response headers size exceeds limit',
+        'Response headers size exceeds limit',
         limit: limits.maxHeaderBytes,
         actualSize: headersLen,
       );
@@ -232,7 +232,7 @@ BhttpResponse parseResponse(Uint8List data, {required BhttpResponseLimits limits
     // Validate content size
     if (contentLen > limits.maxBodyBytes) {
       throw OhttpSizeLimitException(
-        message: 'Response body size exceeds limit',
+        'Response body size exceeds limit',
         limit: limits.maxBodyBytes,
         actualSize: contentLen,
       );

@@ -20,6 +20,7 @@ class HttpClientTransport implements OhttpTransport {
     if (value <= Duration.zero) {
       throw OhttpConfigException(
         '$name must be greater than Duration.zero, got $value',
+        stackTrace: StackTrace.current,
       );
     }
 
@@ -93,11 +94,12 @@ class HttpClientTransport implements OhttpTransport {
     final http.Response response;
     try {
       response = await _client.get(_keysUrl).timeout(_fetchKeyConfigTimeout);
-    } on TimeoutException {
+    } on TimeoutException catch (_, st) {
       throw OhttpTimeoutException(
-        message: 'Fetch KeyConfig timeout',
+        'Fetch KeyConfig timeout',
         timeout: _fetchKeyConfigTimeout,
         url: _keysUrl,
+        stackTrace: st,
       );
     } on OhttpException {
       rethrow;
@@ -133,11 +135,12 @@ class HttpClientTransport implements OhttpTransport {
             body: body,
           )
           .timeout(_postToGatewayTimeout);
-    } on TimeoutException {
+    } on TimeoutException catch (_, st) {
       throw OhttpTimeoutException(
-        message: 'Post to gateway timeout',
+        'Post to gateway timeout',
         timeout: _postToGatewayTimeout,
         url: _gatewayUrl,
+        stackTrace: st,
       );
     } on OhttpException {
       rethrow;

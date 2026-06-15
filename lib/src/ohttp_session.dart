@@ -37,6 +37,7 @@ class OhttpSession {
     if (value <= 0) {
       throw OhttpConfigException(
         'maxEncryptedResponseBytes must be positive, got $value',
+        stackTrace: StackTrace.current,
       );
     }
 
@@ -47,11 +48,13 @@ class OhttpSession {
     if (limits.maxHeaderBytes <= 0) {
       throw OhttpConfigException(
         'decryptedResponseLimits.maxHeaderBytes must be positive, got ${limits.maxHeaderBytes}',
+        stackTrace: StackTrace.current,
       );
     }
     if (limits.maxBodyBytes <= 0) {
       throw OhttpConfigException(
         'decryptedResponseLimits.maxBodyBytes must be positive, got ${limits.maxBodyBytes}',
+        stackTrace: StackTrace.current,
       );
     }
 
@@ -111,7 +114,7 @@ class OhttpSession {
 
     if (encResponse.length > _maxEncryptedResponseBytes) {
       throw OhttpSizeLimitException(
-        message: 'Gateway response size exceeds limit',
+        'Gateway response size exceeds limit',
         limit: _maxEncryptedResponseBytes,
         actualSize: encResponse.length,
       );
