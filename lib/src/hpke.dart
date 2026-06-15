@@ -47,17 +47,21 @@ class HpkeSender {
       recipientPublicKey,
       testKeyPair: testKeyPair,
     );
-    final (key, baseNonce, exporterSecret) = await _keySchedule(
-      sharedSecret,
-      info,
-    );
+    try {
+      final (key, baseNonce, exporterSecret) = await _keySchedule(
+        sharedSecret,
+        info,
+      );
 
-    return HpkeSenderContext._(
-      enc: enc,
-      key: key,
-      baseNonce: baseNonce,
-      exporterSecret: exporterSecret,
-    );
+      return HpkeSenderContext._(
+        enc: enc,
+        key: key,
+        baseNonce: baseNonce,
+        exporterSecret: exporterSecret,
+      );
+    } finally {
+      sharedSecret.wipeBytes();
+    }
   }
 
   // -- Raw HKDF operations (RFC 5869) --
@@ -96,17 +100,29 @@ class HpkeSender {
       final n = (length + hashLen - 1) ~/ hashLen;
       var t = Uint8List(0);
       final okm = BytesBuilder();
-      for (var i = 1; i <= n; i++) {
-        final input = Uint8List.fromList([...t, ...info, i]);
-        final mac = await _hmac.calculateMac(
-          input,
-          secretKey: secretKey,
-        );
-        t = Uint8List.fromList(mac.bytes);
-        okm.add(t);
+      try {
+        for (var i = 1; i <= n; i++) {
+          final input = Uint8List.fromList([...t, ...info, i]);
+          final mac = await _hmac.calculateMac(
+            input,
+            secretKey: secretKey,
+          );
+          t.wipeBytes();
+          t = Uint8List.fromList(mac.bytes);
+          okm.add(t);
+        }
+        final okmBytes = Uint8List.fromList(okm.toBytes());
+        try {
+          return Uint8List.sublistView(okmBytes, 0, length);
+        } finally {
+          // Wipe the bytes beyond the returned sublist view (they share the same buffer).
+          for (var i = length; i < okmBytes.length; i++) {
+            okmBytes[i] = 0;
+          }
+        }
+      } finally {
+        t.wipeBytes();
       }
-
-      return Uint8List.sublistView(Uint8List.fromList(okm.toBytes()), 0, length);
     } on Exception catch (e, st) {
       throw OhttpCryptoException(
         'HKDF-Expand failed',
@@ -153,9 +169,13 @@ class HpkeSender {
       final kemContext = Uint8List.fromList([...enc, ...recipientPkBytes]);
 
       // shared_secret = ExtractAndExpand(dh, kem_context)
-      final sharedSecret = await _extractAndExpand(dh, kemContext);
+      try {
+        final sharedSecret = await _extractAndExpand(dh, kemContext);
 
-      return (sharedSecret, enc);
+        return (sharedSecret, enc);
+      } finally {
+        dh.wipeBytes();
+      }
     } on OhttpCryptoException {
       rethrow;
     } on Exception catch (e, st) {
@@ -178,13 +198,17 @@ class HpkeSender {
       dh,
     );
 
-    return _labeledExpand(
-      _kemSuiteId,
-      prk,
-      utf8.encode('shared_secret'),
-      kemContext,
-      CipherSuite.kemSharedSecretLength,
-    );
+    try {
+      return await _labeledExpand(
+        _kemSuiteId,
+        prk,
+        utf8.encode('shared_secret'),
+        kemContext,
+        CipherSuite.kemSharedSecretLength,
+      );
+    } finally {
+      prk.wipeBytes();
+    }
   }
 
   // -- Key Schedule (RFC 9180 §5.1, base mode) --
@@ -218,31 +242,35 @@ class HpkeSender {
       Uint8List(0),
     );
 
-    final key = await _labeledExpand(
-      _hpkeSuiteId,
-      secret,
-      utf8.encode('key'),
-      ksContext,
-      CipherSuite.aeadKeyLength,
-    );
+    try {
+      final key = await _labeledExpand(
+        _hpkeSuiteId,
+        secret,
+        utf8.encode('key'),
+        ksContext,
+        CipherSuite.aeadKeyLength,
+      );
 
-    final baseNonce = await _labeledExpand(
-      _hpkeSuiteId,
-      secret,
-      utf8.encode('base_nonce'),
-      ksContext,
-      CipherSuite.aeadNonceLength,
-    );
+      final baseNonce = await _labeledExpand(
+        _hpkeSuiteId,
+        secret,
+        utf8.encode('base_nonce'),
+        ksContext,
+        CipherSuite.aeadNonceLength,
+      );
 
-    final exporterSecret = await _labeledExpand(
-      _hpkeSuiteId,
-      secret,
-      utf8.encode('exp'),
-      ksContext,
-      CipherSuite.kdfHashLength,
-    );
+      final exporterSecret = await _labeledExpand(
+        _hpkeSuiteId,
+        secret,
+        utf8.encode('exp'),
+        ksContext,
+        CipherSuite.kdfHashLength,
+      );
 
-    return (key, baseNonce, exporterSecret);
+      return (key, baseNonce, exporterSecret);
+    } finally {
+      secret.wipeBytes();
+    }
   }
 
   // -- Labeled HKDF operations (RFC 9180 §4) --
@@ -254,15 +282,18 @@ class HpkeSender {
     Uint8List salt,
     List<int> label,
     Uint8List ikm,
-  ) {
+  ) async {
     final labeledIkm = Uint8List.fromList([
       ...utf8.encode('HPKE-v1'),
       ...suiteId,
       ...label,
       ...ikm,
     ]);
-
-    return hkdfExtract(salt, labeledIkm);
+    try {
+      return await hkdfExtract(salt, labeledIkm);
+    } finally {
+      labeledIkm.wipeBytes();
+    }
   }
 
   /// LabeledExpand(prk, label, info, L) =
