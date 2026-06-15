@@ -10,6 +10,7 @@ class _RecordingObserver extends OhttpObserver {
   final List<String> events = [];
   Object? lastDecapsulationError;
   Object? lastGatewayError;
+  Object? lastEncapsulationError;
 
   @override
   void onKeyConfigFetched() => events.add('fetched');
@@ -30,6 +31,12 @@ class _RecordingObserver extends OhttpObserver {
   void onGatewayError([Object? error]) {
     events.add('gatewayError');
     lastGatewayError = error;
+  }
+
+  @override
+  void onEncapsulationError([Object? error]) {
+    events.add('encapsulationError');
+    lastEncapsulationError = error;
   }
 
   @override
@@ -58,6 +65,24 @@ class _ThrowingObserver extends OhttpObserver {
 
   @override
   void onEncapsulationError([Object? error]) => throw Exception('fail');
+}
+
+/// KeyConfigCache subclass that returns a config with unsupported KDF/AEAD,
+/// causing ohttpEncapsulate() to throw OhttpUnsupportedSuiteException.
+class _FailingEncapsulationCache extends KeyConfigCache {
+  _FailingEncapsulationCache({
+    required super.transport,
+    super.observer,
+  });
+
+  @override
+  Future<OhttpKeyConfig> get() async => OhttpKeyConfig(
+    keyId: 0x01,
+    kemId: 0x0020,
+    publicKey: Uint8List(32),
+    kdfId: 0x0002, // NOT HKDF-SHA256 — unsupported
+    aeadId: 0x0002, // NOT AES-128-GCM — unsupported
+  );
 }
 
 /// Fake transport for session-level tests.
@@ -146,6 +171,20 @@ void main() {
         observer: t,
       );
       await expectLater(s.send(request), throwsA(isA<OhttpException>()));
+    });
+
+    test('onEncapsulationError on encapsulation failure', () async {
+      final observer = _RecordingObserver();
+      final transport = _FakeTransport();
+      final s = OhttpSession(
+        transport: transport,
+        cache: _FailingEncapsulationCache(transport: transport, observer: observer),
+        observer: observer,
+      );
+
+      await expectLater(s.send(request), throwsA(isA<OhttpUnsupportedSuiteException>()));
+      expect(observer.events, contains('encapsulationError'));
+      expect(observer.lastEncapsulationError, isA<OhttpUnsupportedSuiteException>());
     });
   });
   group('KeyConfigCache with observer', () {

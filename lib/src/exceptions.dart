@@ -113,6 +113,7 @@ class OhttpNetworkException extends OhttpException {
 class OhttpTimeoutException extends OhttpNetworkException {
   /// The timeout duration that was exceeded.
   final Duration timeout;
+
   /// The URL that was being requested when the timeout occurred.
   final Uri? url;
 
