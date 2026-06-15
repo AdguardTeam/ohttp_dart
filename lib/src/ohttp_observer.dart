@@ -11,22 +11,22 @@ abstract class OhttpObserver {
   /// Called right before posting the encapsulated request to the gateway.
   void onPostToGateway() {}
 
-  /// Called when response decapsulation fails with [OhttpDecapsulationException].
-  /// [error] is the exception that caused the failure.
-  void onDecapsulationError([Object? error]) {}
+  /// Called when response decapsulation fails.
+  /// [errorType] is the runtime type of the exception (e.g. [OhttpDecapsulationException]).
+  void onDecapsulationError(Type errorType) {}
 
   /// Called when the gateway returns an error response (non-2xx status).
   /// The cache is invalidated automatically after this event.
-  /// [error] is the [OhttpGatewayException] that was thrown.
-  void onGatewayError([Object? error]) {}
+  /// [statusCode] is the HTTP status code returned by the gateway.
+  void onGatewayError(int statusCode) {}
 
   /// Called when the cached [KeyConfig] is invalidated due to a gateway error.
   /// This event is always fired immediately after [onGatewayError].
   void onCacheInvalidated() {}
 
   /// Called when request encapsulation fails (before posting to the gateway).
-  /// [error] is the exception that caused the failure.
-  void onEncapsulationError([Object? error]) {}
+  /// [errorType] is the runtime type of the exception (e.g. [OhttpUnsupportedSuiteException]).
+  void onEncapsulationError(Type errorType) {}
 
   /// Calls [callback] with this observer and suppresses any errors.
   void notifySafe(void Function(OhttpObserver) callback) {

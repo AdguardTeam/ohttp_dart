@@ -8,9 +8,9 @@ import 'test_utils.dart';
 /// Observer that records callback invocations.
 class _RecordingObserver extends OhttpObserver {
   final List<String> events = [];
-  Object? lastDecapsulationError;
-  Object? lastGatewayError;
-  Object? lastEncapsulationError;
+  Type? lastDecapsulationError;
+  int? lastGatewayError;
+  Type? lastEncapsulationError;
 
   @override
   void onKeyConfigFetched() => events.add('fetched');
@@ -22,21 +22,21 @@ class _RecordingObserver extends OhttpObserver {
   void onPostToGateway() => events.add('postToGateway');
 
   @override
-  void onDecapsulationError([Object? error]) {
+  void onDecapsulationError(Type errorType) {
     events.add('decapsulationError');
-    lastDecapsulationError = error;
+    lastDecapsulationError = errorType;
   }
 
   @override
-  void onGatewayError([Object? error]) {
+  void onGatewayError(int statusCode) {
     events.add('gatewayError');
-    lastGatewayError = error;
+    lastGatewayError = statusCode;
   }
 
   @override
-  void onEncapsulationError([Object? error]) {
+  void onEncapsulationError(Type errorType) {
     events.add('encapsulationError');
-    lastEncapsulationError = error;
+    lastEncapsulationError = errorType;
   }
 
   @override
@@ -55,16 +55,16 @@ class _ThrowingObserver extends OhttpObserver {
   void onPostToGateway() => throw Exception('fail');
 
   @override
-  void onDecapsulationError([Object? error]) => throw Exception('fail');
+  void onDecapsulationError(Type errorType) => throw Exception('fail');
 
   @override
-  void onGatewayError([Object? error]) => throw Exception('fail');
+  void onGatewayError(int statusCode) => throw Exception('fail');
 
   @override
   void onCacheInvalidated() => throw Exception('fail');
 
   @override
-  void onEncapsulationError([Object? error]) => throw Exception('fail');
+  void onEncapsulationError(Type errorType) => throw Exception('fail');
 }
 
 /// KeyConfigCache subclass that returns a config with unsupported KDF/AEAD,
@@ -148,7 +148,7 @@ void main() {
     test('onDecapsulationError on decryption failure', () async {
       await expectLater(makeSession().send(request), throwsA(isA<OhttpException>()));
       expect(observer.events, contains('decapsulationError'));
-      expect(observer.lastDecapsulationError, isA<OhttpException>());
+      expect(observer.lastDecapsulationError, isNotNull);
     });
 
     test('onGatewayError on OhttpGatewayException', () async {
@@ -160,7 +160,7 @@ void main() {
       await expectLater(s.send(request), throwsA(isA<OhttpGatewayException>()));
       expect(observer.events, contains('gatewayError'));
       expect(observer.events, contains('cacheInvalidated'));
-      expect(observer.lastGatewayError, isA<OhttpGatewayException>());
+      expect(observer.lastGatewayError, 502);
     });
 
     test('throwing observer does not break pipeline', () async {
@@ -184,7 +184,7 @@ void main() {
 
       await expectLater(s.send(request), throwsA(isA<OhttpUnsupportedSuiteException>()));
       expect(observer.events, contains('encapsulationError'));
-      expect(observer.lastEncapsulationError, isA<OhttpUnsupportedSuiteException>());
+      expect(observer.lastEncapsulationError, OhttpUnsupportedSuiteException);
     });
   });
   group('KeyConfigCache with observer', () {

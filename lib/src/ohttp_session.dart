@@ -111,7 +111,7 @@ class OhttpSession {
     try {
       encapsulated = await ohttpEncapsulate(config, binaryRequest);
     } on OhttpException catch (e) {
-      _observer?.notifySafe((o) => o.onEncapsulationError(e));
+      _observer?.notifySafe((o) => o.onEncapsulationError(e.runtimeType));
       rethrow;
     }
 
@@ -121,7 +121,7 @@ class OhttpSession {
         _observer?.notifySafe((o) => o.onPostToGateway());
         encResponse = await _transport.postToGateway(encapsulated.encRequest);
       } on OhttpGatewayException catch (e) {
-        _observer?.notifySafe((o) => o.onGatewayError(e));
+        _observer?.notifySafe((o) => o.onGatewayError(e.statusCode));
         _cache.invalidate();
         _observer?.notifySafe((o) => o.onCacheInvalidated());
         rethrow;
@@ -143,7 +143,7 @@ class OhttpSession {
           encResponse,
         );
       } on OhttpException catch (e) {
-        _observer?.notifySafe((o) => o.onDecapsulationError(e));
+        _observer?.notifySafe((o) => o.onDecapsulationError(e.runtimeType));
         rethrow;
       }
 
