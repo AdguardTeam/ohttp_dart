@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 /// Observer for OHTTP request lifecycle events.
 abstract class OhttpObserver {
   /// Called when a [KeyConfig] was successfully fetched from the gateway.
@@ -30,8 +32,13 @@ abstract class OhttpObserver {
   void notifySafe(void Function(OhttpObserver) callback) {
     try {
       callback(this);
-    } catch (_) {
+    } catch (e, st) {
       // Observer errors must not affect the OHTTP pipeline.
+      developer.log(
+        'Observer callback error suppressed',
+        error: e,
+        stackTrace: st,
+      );
     }
   }
 }
