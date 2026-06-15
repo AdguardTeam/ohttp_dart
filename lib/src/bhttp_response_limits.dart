@@ -1,5 +1,3 @@
-import 'exceptions.dart';
-
 /// Configuration for BHTTP response size limits.
 /// Controls maximum allowed sizes for response headers and body to prevent resource exhaustion.
 class BhttpResponseLimits {
@@ -14,8 +12,6 @@ class BhttpResponseLimits {
   final int maxBodyBytes;
 
   /// Creates response limits with specified or default values.
-  ///
-  /// Throws [OhttpConfigException] if [maxHeaderBytes] or [maxBodyBytes] is not positive.
   const BhttpResponseLimits({
     this.maxHeaderBytes = _defaultMaxHeaderBytes,
     this.maxBodyBytes = _defaultMaxBodyBytes,

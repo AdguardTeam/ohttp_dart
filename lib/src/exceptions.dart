@@ -86,12 +86,12 @@ class OhttpSizeLimitException extends OhttpException {
   /// The actual size in bytes that was received or attempted.
   final int actualSize;
 
-  const OhttpSizeLimitException({
+  const OhttpSizeLimitException(
+    super.message, {
     super.stackTrace,
-    required String message,
     required this.limit,
     required this.actualSize,
-  }) : super(message);
+  });
 
   @override
   String get baseMessage => 'OhttpSizeLimitException: $message (limit: $limit bytes, actual: $actualSize bytes)';
@@ -117,12 +117,12 @@ class OhttpTimeoutException extends OhttpNetworkException {
   /// The URL that was being requested when the timeout occurred.
   final Uri? url;
 
-  const OhttpTimeoutException({
+  const OhttpTimeoutException(
+    super.message, {
     super.stackTrace,
-    required String message,
     required this.timeout,
     this.url,
-  }) : super(message);
+  });
 
   @override
   String get baseMessage {
