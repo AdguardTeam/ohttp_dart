@@ -165,12 +165,20 @@ class HpkeSender {
         remotePublicKey: recipientPk,
       );
       final dh = Uint8List.fromList(await dhResult.extractBytes());
-
-      // kem_context = enc || pkR
-      final kemContext = Uint8List.fromList([...enc, ...recipientPkBytes]);
-
-      // shared_secret = ExtractAndExpand(dh, kem_context)
       try {
+        // RFC 9180 §7.1.4: abort if the X25519 DH output is the all-zero value.
+        if (dh.every((b) => b == 0)) {
+          throw OhttpCryptoException(
+            'HPKE KEM encap: DH result is the identity element — '
+            'recipient public key is a low-order point (RFC 9180 §4.3)',
+            stackTrace: StackTrace.current,
+          );
+        }
+
+        // kem_context = enc || pkR
+        final kemContext = Uint8List.fromList([...enc, ...recipientPkBytes]);
+
+        // shared_secret = ExtractAndExpand(dh, kem_context)
         final sharedSecret = await _extractAndExpand(dh, kemContext);
 
         return (sharedSecret, enc);

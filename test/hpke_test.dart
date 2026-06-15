@@ -410,4 +410,42 @@ void main() {
       );
     });
   });
+
+  // RFC 9180 §7.1.4 + RFC 7748 §6.1: the DH result MUST NOT be the all-zero value.
+  // All small-subgroup (low-order) X25519 points produce an all-zero DH output
+  // due to cofactor-8 scalar clamping, so setupBaseS must reject them.
+  //
+  // Points verified experimentally with package:cryptography 2.9.0.
+  // Sources: RFC 7748, libsodium rejection list, Curve25519 torsion subgroup.
+  group('setupBaseS rejects low-order X25519 public keys (RFC 9180 §4.3)', () {
+    // Each entry: (description, 64-char little-endian hex u-coordinate).
+    const lowOrderPoints = <(String, String)>[
+      // u = 0: the point at infinity / identity element.
+      ('zero key (u=0)', '0000000000000000000000000000000000000000000000000000000000000000'),
+      // u = 1: first non-trivial torsion point (order 8).
+      ('u=1', '0100000000000000000000000000000000000000000000000000000000000000'),
+      // Order-8 torsion point from the libsodium / Bernstein rejection list.
+      ('order-8 torsion point (e0eb…b800)', 'e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800'),
+      // Order-4 torsion point.
+      ('order-4 torsion point (5f9c…1157)', '5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f1157'),
+      // u = p − 1 (= −1 in GF(2²⁵⁵−19)): order-2 point.
+      ('u = p−1 (order-2, ec…7f)', 'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f'),
+      // u = p (≡ 0 mod p): same equivalence class as u=0.
+      ('u = p (≡ 0 mod p, ed…7f)', 'edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f'),
+      // u = p + 1 (≡ 1 mod p): same equivalence class as u=1.
+      ('u = p+1 (≡ 1 mod p, ee…7f)', 'eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f'),
+    ];
+
+    for (final (description, hex) in lowOrderPoints) {
+      test('throws OhttpCryptoException for $description', () async {
+        await expectLater(
+          () => HpkeSender.setupBaseS(
+            _hex(hex),
+            Uint8List.fromList(utf8.encode('test-info')),
+          ),
+          throwsA(isA<OhttpCryptoException>()),
+        );
+      });
+    }
+  });
 }
