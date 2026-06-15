@@ -347,4 +347,67 @@ void main() {
       expect(data.every((b) => b == 0), isTrue);
     });
   });
+
+  group('sequence number overflow in seal', () {
+    // RFC 9180 §5.2: sequence number must not exceed 2^Nn - 1.
+    // Our implementation uses a 32-bit Dart int and throws at seq >= 2^32.
+
+    test('seal throws OhttpCryptoException when seq == 2^32 (limit reached)', () async {
+      final x = X25519();
+      final kp = await x.newKeyPair();
+      final pk = await kp.extractPublicKey();
+
+      final ctx = await HpkeSender.setupBaseS(
+        Uint8List.fromList(pk.bytes),
+        Uint8List.fromList(utf8.encode('overflow-test')),
+      );
+
+      ctx.seqForTesting = 1 << 32;
+
+      expect(
+        () => ctx.seal(Uint8List(0), Uint8List.fromList([0x01])),
+        throwsA(isA<OhttpCryptoException>()),
+      );
+    });
+
+    test('seal throws OhttpCryptoException when seq > 2^32 (already overflowed)', () async {
+      final x = X25519();
+      final kp = await x.newKeyPair();
+      final pk = await kp.extractPublicKey();
+
+      final ctx = await HpkeSender.setupBaseS(
+        Uint8List.fromList(pk.bytes),
+        Uint8List.fromList(utf8.encode('overflow-test-2')),
+      );
+
+      ctx.seqForTesting = (1 << 32) + 1;
+
+      expect(
+        () => ctx.seal(Uint8List(0), Uint8List.fromList([0x01])),
+        throwsA(isA<OhttpCryptoException>()),
+      );
+    });
+
+    test('seal succeeds at seq == 2^32 - 1 (last valid call)', () async {
+      final x = X25519();
+      final kp = await x.newKeyPair();
+      final pk = await kp.extractPublicKey();
+
+      final ctx = await HpkeSender.setupBaseS(
+        Uint8List.fromList(pk.bytes),
+        Uint8List.fromList(utf8.encode('overflow-boundary')),
+      );
+
+      ctx.seqForTesting = (1 << 32) - 1;
+
+      final ct = await ctx.seal(Uint8List(0), Uint8List.fromList([0xAA]));
+      expect(ct.length, greaterThan(0));
+
+      // The very next call must fail because seq is now 1 << 32.
+      expect(
+        () => ctx.seal(Uint8List(0), Uint8List.fromList([0xBB])),
+        throwsA(isA<OhttpCryptoException>()),
+      );
+    });
+  });
 }

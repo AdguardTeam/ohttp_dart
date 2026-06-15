@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:meta/meta.dart';
 
 import 'cipher_suite.dart';
 import 'exceptions.dart';
@@ -340,6 +341,10 @@ class HpkeSenderContext {
   });
 
   int _seq = 0;
+
+  /// Overrides the internal sequence counter. For testing only.
+  @visibleForTesting
+  set seqForTesting(int value) => _seq = value;
 
   /// Seal (encrypt) a plaintext with AAD.
   /// Returns ciphertext || 16-byte auth tag.
