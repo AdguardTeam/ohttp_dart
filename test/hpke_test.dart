@@ -448,4 +448,55 @@ void main() {
       });
     }
   });
+
+  // RFC 9180 §5.3: L must be in [1, 255*Nh]. For HKDF-SHA256: Nh=32, max=8160.
+  group('HpkeSenderContext.export invalid length (RFC 9180 §5.3)', () {
+    Future<HpkeSenderContext> makeCtx() async {
+      final x = X25519();
+      final kp = await x.newKeyPair();
+      final pk = await kp.extractPublicKey();
+
+      return HpkeSender.setupBaseS(
+        Uint8List.fromList(pk.bytes),
+        Uint8List.fromList(utf8.encode('export-length-test')),
+      );
+    }
+
+    test('throws OhttpCryptoException for length == 0', () async {
+      final ctx = await makeCtx();
+      expect(
+        () => ctx.export(Uint8List(0), 0),
+        throwsA(isA<OhttpCryptoException>()),
+      );
+    });
+
+    test('throws OhttpCryptoException for length == -1', () async {
+      final ctx = await makeCtx();
+      expect(
+        () => ctx.export(Uint8List(0), -1),
+        throwsA(isA<OhttpCryptoException>()),
+      );
+    });
+
+    test('throws OhttpCryptoException for length > 255*Nh (8161)', () async {
+      final ctx = await makeCtx();
+      // 255 * 32 = 8160 is the max; 8161 must be rejected.
+      expect(
+        () => ctx.export(Uint8List(0), 255 * CipherSuite.kdfHashLength + 1),
+        throwsA(isA<OhttpCryptoException>()),
+      );
+    });
+
+    test('succeeds for length == 1 (minimum valid)', () async {
+      final ctx = await makeCtx();
+      final result = await ctx.export(Uint8List(0), 1);
+      expect(result.length, 1);
+    });
+
+    test('succeeds for length == 255*Nh (maximum valid)', () async {
+      final ctx = await makeCtx();
+      final result = await ctx.export(Uint8List(0), 255 * CipherSuite.kdfHashLength);
+      expect(result.length, 255 * CipherSuite.kdfHashLength);
+    });
+  });
 }

@@ -384,13 +384,25 @@ class HpkeSenderContext {
   }
 
   /// Export a secret from this HPKE context (RFC 9180 §5.3).
-  Future<Uint8List> export(Uint8List exporterContext, int length) => HpkeSender._labeledExpand(
-    HpkeSender._hpkeSuiteId,
-    exporterSecret,
-    utf8.encode('sec'),
-    exporterContext,
-    length,
-  );
+  ///
+  /// [length] must be in the range [1, 255 * Nh] (i.e. 1–8160 for HKDF-SHA256).
+  Future<Uint8List> export(Uint8List exporterContext, int length) {
+    // RFC 9180 §5.3: L has a maximum value of 255*Nh.
+    if (length <= 0 || length > 255 * CipherSuite.kdfHashLength) {
+      throw OhttpCryptoException(
+        'HPKE export length out of range: $length (must be 1..${255 * CipherSuite.kdfHashLength})',
+        stackTrace: StackTrace.current,
+      );
+    }
+
+    return HpkeSender._labeledExpand(
+      HpkeSender._hpkeSuiteId,
+      exporterSecret,
+      utf8.encode('sec'),
+      exporterContext,
+      length,
+    );
+  }
 
   /// Zeroes out sensitive cryptographic data (key, base_nonce, exporter secret).
   /// The `enc` (public key) is NOT zeroed — it is an ephemeral public key
