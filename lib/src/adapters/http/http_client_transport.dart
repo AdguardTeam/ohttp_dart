@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -13,15 +14,46 @@ import 'package:ohttp_dart/src/ohttp_transport.dart';
 /// retains ownership of the [http.Client].
 class HttpClientTransport implements OhttpTransport {
   static const _ohttpMediaType = 'message/ohttp-req';
+  static const _defaultTimeout = Duration(seconds: 30);
+
+  static Duration _validateDuration(Duration value, String name) {
+    if (value <= Duration.zero) {
+      throw OhttpConfigException(
+        '$name must be greater than Duration.zero, got $value',
+        stackTrace: StackTrace.current,
+      );
+    }
+
+    return value;
+  }
+
+  static Uri _validateHttpsScheme(Uri uri, String parameterName) {
+    if (uri.scheme != 'https') {
+      throw OhttpConfigException(
+        '$parameterName must use HTTPS scheme per RFC 9458 §1. '
+        'Got scheme: "${uri.scheme}"',
+        stackTrace: StackTrace.current,
+      );
+    }
+
+    return uri;
+  }
 
   final http.Client _client;
   final Uri _keysUrl;
   final Uri _gatewayUrl;
 
+  final Duration _fetchKeyConfigTimeout;
+
+  final Duration _postToGatewayTimeout;
+
   /// Creates an HTTP client transport for OHTTP.
   ///
   /// Throws [OhttpConfigException] if [keysUrl] or [gatewayUrl] do not use
   /// the HTTPS scheme.
+  ///
+  /// [fetchKeyConfigTimeout] and [postToGatewayTimeout] control the maximum
+  /// time to wait for HTTP responses. Both default to 30 seconds.
   ///
   /// ## Security Warning
   ///
@@ -32,12 +64,13 @@ class HttpClientTransport implements OhttpTransport {
     required http.Client client,
     required Uri keysUrl,
     required Uri gatewayUrl,
+    Duration fetchKeyConfigTimeout = _defaultTimeout,
+    Duration postToGatewayTimeout = _defaultTimeout,
   }) : _client = client,
-       _keysUrl = keysUrl,
-       _gatewayUrl = gatewayUrl {
-    _validateHttpsScheme(keysUrl, 'keysUrl');
-    _validateHttpsScheme(gatewayUrl, 'gatewayUrl');
-  }
+       _keysUrl = _validateHttpsScheme(keysUrl, 'keysUrl'),
+       _gatewayUrl = _validateHttpsScheme(gatewayUrl, 'gatewayUrl'),
+       _fetchKeyConfigTimeout = _validateDuration(fetchKeyConfigTimeout, 'fetchKeyConfigTimeout'),
+       _postToGatewayTimeout = _validateDuration(postToGatewayTimeout, 'postToGatewayTimeout');
 
   /// Creates an HTTP client transport without HTTPS scheme validation.
   ///
@@ -48,15 +81,26 @@ class HttpClientTransport implements OhttpTransport {
     required http.Client client,
     required Uri keysUrl,
     required Uri gatewayUrl,
+    Duration fetchKeyConfigTimeout = _defaultTimeout,
+    Duration postToGatewayTimeout = _defaultTimeout,
   }) : _client = client,
        _keysUrl = keysUrl,
-       _gatewayUrl = gatewayUrl;
+       _gatewayUrl = gatewayUrl,
+       _fetchKeyConfigTimeout = _validateDuration(fetchKeyConfigTimeout, 'fetchKeyConfigTimeout'),
+       _postToGatewayTimeout = _validateDuration(postToGatewayTimeout, 'postToGatewayTimeout');
 
   @override
   Future<Uint8List> fetchKeyConfig() async {
     final http.Response response;
     try {
-      response = await _client.get(_keysUrl);
+      response = await _client.get(_keysUrl).timeout(_fetchKeyConfigTimeout);
+    } on TimeoutException catch (_, st) {
+      throw OhttpTimeoutException(
+        'Fetch KeyConfig timeout',
+        timeout: _fetchKeyConfigTimeout,
+        url: _keysUrl,
+        stackTrace: st,
+      );
     } on OhttpException {
       rethrow;
     } on Exception catch (e, st) {
@@ -82,12 +126,21 @@ class HttpClientTransport implements OhttpTransport {
   Future<Uint8List> postToGateway(Uint8List body) async {
     final http.Response response;
     try {
-      response = await _client.post(
-        _gatewayUrl,
-        headers: {
-          'content-type': _ohttpMediaType,
-        },
-        body: body,
+      response = await _client
+          .post(
+            _gatewayUrl,
+            headers: {
+              'content-type': _ohttpMediaType,
+            },
+            body: body,
+          )
+          .timeout(_postToGatewayTimeout);
+    } on TimeoutException catch (_, st) {
+      throw OhttpTimeoutException(
+        'Post to gateway timeout',
+        timeout: _postToGatewayTimeout,
+        url: _gatewayUrl,
+        stackTrace: st,
       );
     } on OhttpException {
       rethrow;
@@ -108,15 +161,5 @@ class HttpClientTransport implements OhttpTransport {
     }
 
     return response.bodyBytes;
-  }
-
-  void _validateHttpsScheme(Uri uri, String parameterName) {
-    if (uri.scheme != 'https') {
-      throw OhttpConfigException(
-        '$parameterName must use HTTPS scheme per RFC 9458 §1. '
-        'Got scheme: "${uri.scheme}"',
-        stackTrace: StackTrace.current,
-      );
-    }
   }
 }

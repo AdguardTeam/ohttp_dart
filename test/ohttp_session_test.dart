@@ -8,6 +8,8 @@ import 'test_utils.dart';
 /// Fake transport that records calls and can be instructed to succeed or fail.
 class _FakeTransport implements OhttpTransport {
   final Uint8List config;
+  Uint8List? responseBody;
+
   _FakeTransport([Uint8List? config]) : config = config ?? validKeyConfig();
 
   int fetchCount = 0;
@@ -33,8 +35,8 @@ class _FakeTransport implements OhttpTransport {
       throw postError!;
     }
 
-    // Return arbitrary bytes; the caller is expected to handle decap failure.
-    return Uint8List(64);
+    // Return configured response body or arbitrary bytes.
+    return responseBody ?? Uint8List(64);
   }
 }
 
@@ -109,6 +111,132 @@ void main() {
       expect(transport.postCount, 1);
       expect(transport.lastPostBody, isNotNull);
       expect(transport.lastPostBody!.isNotEmpty, isTrue);
+    });
+
+    test('throws OhttpSizeLimitException when response exceeds maxEncryptedResponseBytes', () async {
+      // Configure transport to return a large response
+      transport.responseBody = Uint8List(1000);
+
+      final limitedSession = OhttpSession(
+        transport: transport,
+        cache: KeyConfigCache(transport: transport),
+        maxEncryptedResponseBytes: 500, // Set limit below actual response size
+      );
+
+      await expectLater(
+        limitedSession.send(request),
+        throwsA(
+          isA<OhttpSizeLimitException>()
+              .having((e) => e.limit, 'limit', 500)
+              .having((e) => e.actualSize, 'actualSize', 1000)
+              .having((e) => e.message, 'message', contains('size exceeds limit')),
+        ),
+      );
+    });
+
+    test('accepts response within maxEncryptedResponseBytes limit', () async {
+      transport.responseBody = Uint8List(500);
+
+      final limitedSession = OhttpSession(
+        transport: transport,
+        cache: KeyConfigCache(transport: transport),
+        maxEncryptedResponseBytes: 1000,
+      );
+
+      // Will fail at decapsulation (fake bytes), but should NOT throw
+      // OhttpSizeLimitException
+      await expectLater(
+        limitedSession.send(request),
+        throwsA(
+          isNot(isA<OhttpSizeLimitException>()),
+        ),
+      );
+    });
+
+    test('uses default maxEncryptedResponseBytes of 16 MiB', () async {
+      // Response larger than 16 MiB should fail
+      transport.responseBody = Uint8List(17 * 1024 * 1024); // 17 MiB
+
+      await expectLater(
+        session.send(request),
+        throwsA(isA<OhttpSizeLimitException>()),
+      );
+    });
+
+    test('throws OhttpConfigException when maxEncryptedResponseBytes is zero', () {
+      expect(
+        () => OhttpSession(
+          transport: transport,
+          cache: KeyConfigCache(transport: transport),
+          maxEncryptedResponseBytes: 0,
+        ),
+        throwsA(isA<OhttpConfigException>()),
+      );
+    });
+
+    test('throws OhttpConfigException when maxEncryptedResponseBytes is negative', () {
+      expect(
+        () => OhttpSession(
+          transport: transport,
+          cache: KeyConfigCache(transport: transport),
+          maxEncryptedResponseBytes: -1,
+        ),
+        throwsA(isA<OhttpConfigException>()),
+      );
+    });
+
+    test('throws OhttpConfigException when decryptedResponseLimits.maxHeaderBytes is zero', () {
+      expect(
+        () => OhttpSession(
+          transport: transport,
+          cache: KeyConfigCache(transport: transport),
+          decryptedResponseLimits: const BhttpResponseLimits(maxHeaderBytes: 0),
+        ),
+        throwsA(isA<OhttpConfigException>()),
+      );
+    });
+
+    test('throws OhttpConfigException when decryptedResponseLimits.maxHeaderBytes is negative', () {
+      expect(
+        () => OhttpSession(
+          transport: transport,
+          cache: KeyConfigCache(transport: transport),
+          decryptedResponseLimits: const BhttpResponseLimits(maxHeaderBytes: -1),
+        ),
+        throwsA(isA<OhttpConfigException>()),
+      );
+    });
+
+    test('throws OhttpConfigException when decryptedResponseLimits.maxBodyBytes is zero', () {
+      expect(
+        () => OhttpSession(
+          transport: transport,
+          cache: KeyConfigCache(transport: transport),
+          decryptedResponseLimits: const BhttpResponseLimits(maxBodyBytes: 0),
+        ),
+        throwsA(isA<OhttpConfigException>()),
+      );
+    });
+
+    test('throws OhttpConfigException when decryptedResponseLimits.maxBodyBytes is negative', () {
+      expect(
+        () => OhttpSession(
+          transport: transport,
+          cache: KeyConfigCache(transport: transport),
+          decryptedResponseLimits: const BhttpResponseLimits(maxBodyBytes: -1),
+        ),
+        throwsA(isA<OhttpConfigException>()),
+      );
+    });
+
+    test('throws OhttpConfigException when withTransport has invalid decryptedResponseLimits', () {
+      expect(
+        () => OhttpSession.withTransport(
+          transport: transport,
+          decryptedResponseLimits: const BhttpResponseLimits(maxHeaderBytes: -1),
+        ),
+        throwsA(isA<OhttpConfigException>()),
+      );
     });
   });
 

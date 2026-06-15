@@ -78,6 +78,25 @@ class OhttpFormatException extends OhttpException {
   const OhttpFormatException(super.message, {super.stackTrace});
 }
 
+/// Thrown when response data exceeds configured size limits.
+class OhttpSizeLimitException extends OhttpException {
+  /// The maximum allowed size in bytes.
+  final int limit;
+
+  /// The actual size in bytes that was received or attempted.
+  final int actualSize;
+
+  const OhttpSizeLimitException(
+    super.message, {
+    super.stackTrace,
+    required this.limit,
+    required this.actualSize,
+  });
+
+  @override
+  String get baseMessage => 'OhttpSizeLimitException: $message (limit: $limit bytes, actual: $actualSize bytes)';
+}
+
 /// Thrown when a network-level error occurs during transport (DNS failure,
 /// connection refused, timeout, etc.).
 class OhttpNetworkException extends OhttpException {
@@ -88,4 +107,27 @@ class OhttpNetworkException extends OhttpException {
 
   @override
   String get baseMessage => cause != null ? '$runtimeType: $message (cause: $cause)' : super.baseMessage;
+}
+
+/// Thrown when an HTTP request exceeds its configured timeout.
+class OhttpTimeoutException extends OhttpNetworkException {
+  /// The timeout duration that was exceeded.
+  final Duration timeout;
+
+  /// The URL that was being requested when the timeout occurred.
+  final Uri? url;
+
+  const OhttpTimeoutException(
+    super.message, {
+    super.stackTrace,
+    required this.timeout,
+    this.url,
+  });
+
+  @override
+  String get baseMessage {
+    final urlPart = url != null ? ' for $url' : '';
+
+    return 'OhttpTimeoutException: $message$urlPart (timeout: ${timeout.inSeconds}s)';
+  }
 }

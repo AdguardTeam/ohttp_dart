@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'bhttp_response_limits.dart';
 import 'exceptions.dart';
 
 /// Binary HTTP Messages (RFC 9292) — Known-Length framing.
@@ -43,31 +44,38 @@ Uint8List encodeVarint(int value) {
 /// Decode a QUIC variable-length integer at [offset] in [data].
 /// Returns (value, bytesConsumed).
 (int, int) decodeVarint(Uint8List data, int offset) {
-  final first = data[offset];
-  final prefix = first >> 6;
-  switch (prefix) {
-    case 0:
-      return (first & 0x3F, 1);
-    case 1:
-      return (((first & 0x3F) << 8) | data[offset + 1], 2);
-    case 2:
-      return (
-        ((first & 0x3F) << 24) | (data[offset + 1] << 16) | (data[offset + 2] << 8) | data[offset + 3],
-        4,
-      );
-    case 3:
-      // 8-byte varint — for our use cases this won't occur, but handle it
-      var value = (first & 0x3F);
-      for (var i = 1; i <= 7; i++) {
-        value = (value << 8) | data[offset + i];
-      }
+  try {
+    final first = data[offset];
+    final prefix = first >> 6;
+    switch (prefix) {
+      case 0:
+        return (first & 0x3F, 1);
+      case 1:
+        return (((first & 0x3F) << 8) | data[offset + 1], 2);
+      case 2:
+        return (
+          ((first & 0x3F) << 24) | (data[offset + 1] << 16) | (data[offset + 2] << 8) | data[offset + 3],
+          4,
+        );
+      case 3:
+        // 8-byte varint — for our use cases this won't occur, but handle it
+        var value = (first & 0x3F);
+        for (var i = 1; i <= 7; i++) {
+          value = (value << 8) | data[offset + i];
+        }
 
-      return (value, 8);
-    default:
-      throw OhttpFormatException(
-        'Unexpected varint prefix: ${first >> 6}',
-        stackTrace: StackTrace.current,
-      );
+        return (value, 8);
+      default:
+        throw OhttpFormatException(
+          'Unexpected varint prefix: ${first >> 6}',
+          stackTrace: StackTrace.current,
+        );
+    }
+  } on RangeError catch (e, st) {
+    throw OhttpFormatException(
+      'BHTTP varint: unexpected end of data at offset $offset (length ${data.length}): ${e.message}',
+      stackTrace: st,
+    );
   }
 }
 
@@ -147,7 +155,10 @@ class BhttpResponse {
 }
 
 /// Parse a Known-Length BHTTP response (RFC 9292).
-BhttpResponse parseResponse(Uint8List data) {
+///
+/// Throws [OhttpFormatException] on structural errors.
+/// Throws [OhttpSizeLimitException] if header section or body exceeds [limits].
+BhttpResponse parseResponse(Uint8List data, {required BhttpResponseLimits limits}) {
   try {
     var offset = 0;
 
@@ -177,10 +188,27 @@ BhttpResponse parseResponse(Uint8List data) {
       }
     }
 
+    // Validate final status code (RFC 9110 §15: 100-599)
+    if (statusCode < 100 || statusCode > 599) {
+      throw OhttpFormatException(
+        'BHTTP response: invalid status code $statusCode (expected 100-599)',
+        stackTrace: StackTrace.current,
+      );
+    }
+
     // Header section
     final (headersLen, headersLenLen) = decodeVarint(data, offset);
     offset += headersLenLen;
     final headersEnd = offset + headersLen;
+
+    // Validate header section size
+    if (headersLen > limits.maxHeaderBytes) {
+      throw OhttpSizeLimitException(
+        'Response headers size exceeds limit',
+        limit: limits.maxHeaderBytes,
+        actualSize: headersLen,
+      );
+    }
 
     final headers = <(String, String)>[];
     while (offset < headersEnd) {
@@ -200,6 +228,16 @@ BhttpResponse parseResponse(Uint8List data) {
     // Content
     final (contentLen, contentLenLen) = decodeVarint(data, offset);
     offset += contentLenLen;
+
+    // Validate content size
+    if (contentLen > limits.maxBodyBytes) {
+      throw OhttpSizeLimitException(
+        'Response body size exceeds limit',
+        limit: limits.maxBodyBytes,
+        actualSize: contentLen,
+      );
+    }
+
     final body = Uint8List.fromList(data.sublist(offset, offset + contentLen));
 
     return BhttpResponse(statusCode: statusCode, headers: headers, body: body);

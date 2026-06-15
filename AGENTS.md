@@ -30,23 +30,35 @@ optional adapter for `package:http`.
 ```
 ohttp_dart/
 ├── lib/
-│   ├── ohttp_dart.dart              # Core library entry point (transport-agnostic)
-│   ├── http.dart                    # Optional package:http adapter entry point
+│   ├── ohttp_dart.dart                   # Core library entry point (transport-agnostic)
+│   ├── http.dart                         # Optional package:http adapter entry point
 │   └── src/
-│       ├── bhttp.dart               # Binary HTTP (RFC 9292)
-│       ├── hpke.dart                # HPKE Base Mode Sender (RFC 9180)
-│       ├── ohttp.dart               # OHTTP encap/decap + KeyConfig (RFC 9458)
-│       ├── ohttp_transport.dart     # Transport abstraction interface
-│       ├── ohttp_data.dart          # Request / response data types
-│       ├── key_config_cache.dart    # TTL cache with single-flight for key configs
-│       ├── ohttp_session.dart       # OHTTP session orchestrator
+│       ├── bhttp.dart                    # Binary HTTP (RFC 9292)
+│       ├── bhttp_response_limits.dart    # Response size limits configuration
+│       ├── cipher_suite.dart             # Cipher suite constants
+│       ├── exceptions.dart               # Exception hierarchy
+│       ├── hpke.dart                     # HPKE Base Mode Sender (RFC 9180)
+│       ├── key_config_cache.dart         # TTL cache with single-flight for key configs
+│       ├── ohttp.dart                    # OHTTP encap/decap + KeyConfig (RFC 9458)
+│       ├── ohttp_data.dart               # Request / response data types
+│       ├── ohttp_session.dart            # OHTTP session orchestrator
+│       ├── ohttp_transport.dart          # Transport abstraction interface
 │       └── adapters/
 │           └── http/
 │               ├── http_client_transport.dart   # HttpClientTransport implementation
 │               └── ohttp_http_client.dart       # OhttpHttpClient drop-in replacement
-├── test/                            # Unit tests (mirrors lib/ structure)
-├── example/                         # Usage examples
-└── analysis_options.yaml            # Linter rules, DCM config, formatter settings
+├── test/                                  # Unit tests (mirrors lib/ structure)
+│   ├── bhttp_test.dart
+│   ├── hpke_test.dart
+│   ├── key_config_cache_test.dart
+│   ├── ohttp_session_test.dart
+│   ├── ohttp_test.dart
+│   ├── test_utils.dart
+│   └── adapters/
+│       └── http_adapter_test.dart
+├── example/                               # Usage examples
+│   └── ohttp_dart_example.dart
+└── analysis_options.yaml                  # Linter rules, DCM config, formatter settings
 ```
 
 ### Core Concepts
@@ -186,9 +198,19 @@ Write or update tests when:
 
 ### Error Handling
 
-- Use specific exception types for different failure modes
-- Document exception cases in method signatures
-- Provide actionable error messages
+The library uses a sealed exception hierarchy:
+
+- `OhttpException` (sealed base) — base for all library exceptions
+- `OhttpConfigException` — invalid configuration parameters (wrong URL scheme, invalid timeouts)
+- `OhttpKeyConfigException` — malformed KeyConfig binary data
+- `OhttpUnsupportedSuiteException` — unsupported KEM/KDF/AEAD cipher suite
+- `OhttpGatewayException` — gateway returned non-2xx response (triggers cache invalidation)
+- `OhttpCryptoException` — cryptographic operation failure (AEAD auth, HPKE errors)
+- `OhttpDecapsulationException` — OHTTP response decapsulation failure
+- `OhttpFormatException` — malformed BHTTP data (wrong framing, invalid status code)
+- `OhttpSizeLimitException` — response/request exceeds configured size limits
+- `OhttpNetworkException` — network-level error (DNS, connection, etc.)
+- `OhttpTimeoutException` — HTTP request exceeded configured timeout
 
 ## Security Considerations
 
