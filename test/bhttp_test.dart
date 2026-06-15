@@ -66,6 +66,34 @@ void main() {
         expect(len, encoded.length);
       }
     });
+
+    // RFC 9000 §16: 8-byte varint boundary
+    test('largest 4-byte value (0x3FFFFFFF = 2^30 - 1) roundtrips as 4 bytes', () {
+      const value = 0x3FFFFFFF; // 1073741823
+      final encoded = encodeVarint(value);
+      expect(encoded.length, 4, reason: 'largest 4-byte varint must be 4 bytes');
+      final (decoded, len) = decodeVarint(Uint8List.fromList(encoded), 0);
+      expect(decoded, value);
+      expect(len, 4);
+    });
+
+    test('smallest 8-byte value (0x40000000 = 2^30) roundtrips as 8 bytes', () {
+      const value = 0x40000000; // 1073741824
+      final encoded = encodeVarint(value);
+      expect(encoded.length, 8, reason: 'smallest 8-byte varint must be 8 bytes');
+      final (decoded, len) = decodeVarint(Uint8List.fromList(encoded), 0);
+      expect(decoded, value);
+      expect(len, 8);
+    });
+
+    test('largest 8-byte value (2^62 - 1) roundtrips as 8 bytes', () {
+      const value = 0x3FFFFFFFFFFFFFFF; // 4611686018427387903
+      final encoded = encodeVarint(value);
+      expect(encoded.length, 8, reason: 'largest valid varint must be 8 bytes');
+      final (decoded, len) = decodeVarint(Uint8List.fromList(encoded), 0);
+      expect(decoded, value);
+      expect(len, 8);
+    });
   });
 
   group('serializeRequest', () {
