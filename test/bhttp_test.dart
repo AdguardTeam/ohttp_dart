@@ -369,40 +369,82 @@ void main() {
       );
     });
 
-    test('throws OhttpFormatException on truncated response sections', () {
-      // Truncated: only framing indicator
-      final buf1 = BytesBuilder();
-      buf1.add(encodeVarint(1));
+    test('throws OhttpFormatException when truncated after framing indicator', () {
+      final buf = BytesBuilder();
+      buf.add(encodeVarint(1));
       expect(
         () => parseResponse(
-          buf1.toBytes(),
+          buf.toBytes(),
           limits: const BhttpResponseLimits(),
         ),
         throwsA(isA<OhttpFormatException>()),
       );
+    });
 
-      // Truncated header section
-      final buf2 = BytesBuilder();
-      buf2.add(encodeVarint(1));
-      buf2.add(encodeVarint(200));
-      buf2.add(encodeVarint(100));
+    test('throws OhttpFormatException when header section bytes are missing', () {
+      final buf = BytesBuilder();
+      buf.add(encodeVarint(1));
+      buf.add(encodeVarint(200));
+      buf.add(encodeVarint(100));
       expect(
         () => parseResponse(
-          buf2.toBytes(),
+          buf.toBytes(),
           limits: const BhttpResponseLimits(),
         ),
         throwsA(isA<OhttpFormatException>()),
       );
+    });
 
-      // Truncated content
-      final buf3 = BytesBuilder();
-      buf3.add(encodeVarint(1));
-      buf3.add(encodeVarint(200));
-      buf3.add(encodeVarint(0));
-      buf3.add(encodeVarint(100));
+    test('throws OhttpFormatException when content bytes are missing', () {
+      final buf = BytesBuilder();
+      buf.add(encodeVarint(1));
+      buf.add(encodeVarint(200));
+      buf.add(encodeVarint(0));
+      buf.add(encodeVarint(100));
       expect(
         () => parseResponse(
-          buf3.toBytes(),
+          buf.toBytes(),
+          limits: const BhttpResponseLimits(),
+        ),
+        throwsA(isA<OhttpFormatException>()),
+      );
+    });
+
+    test('throws OhttpFormatException when header name bytes are truncated', () {
+      final buf = BytesBuilder();
+      buf.add(encodeVarint(1));
+      buf.add(encodeVarint(200));
+      final headerBuf = BytesBuilder();
+      headerBuf.add(encodeVarint(8)); // nameLen = 8
+      headerBuf.add([0x61, 0x62, 0x63]); // only 3 bytes of name instead of 8
+      final headerBytes = headerBuf.toBytes();
+      buf.add(encodeVarint(headerBytes.length));
+      buf.add(headerBytes);
+      expect(
+        () => parseResponse(
+          buf.toBytes(),
+          limits: const BhttpResponseLimits(),
+        ),
+        throwsA(isA<OhttpFormatException>()),
+      );
+    });
+
+    test('throws OhttpFormatException when header value bytes are truncated', () {
+      final buf = BytesBuilder();
+      buf.add(encodeVarint(1));
+      buf.add(encodeVarint(200));
+      final headerBuf = BytesBuilder();
+      final headerName = utf8.encode('x-test');
+      headerBuf.add(encodeVarint(headerName.length));
+      headerBuf.add(headerName);
+      headerBuf.add(encodeVarint(10)); // valueLen = 10
+      headerBuf.add([0x61, 0x62]); // only 2 bytes of value instead of 10
+      final headerBytes = headerBuf.toBytes();
+      buf.add(encodeVarint(headerBytes.length));
+      buf.add(headerBytes);
+      expect(
+        () => parseResponse(
+          buf.toBytes(),
           limits: const BhttpResponseLimits(),
         ),
         throwsA(isA<OhttpFormatException>()),
