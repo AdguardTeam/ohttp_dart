@@ -30,27 +30,66 @@ consumers using `package:http`.
 serialization → OHTTP encapsulation → transport call → decapsulation →
 BHTTP parsing. Cache invalidation happens automatically on gateway errors.
 
+### Observer Pattern
+
+Sessions accept an optional `OhttpObserver` to receive lifecycle event notifications:
+
+```dart
+class MyObserver extends OhttpObserver {
+  @override
+  void onKeyConfigFetched() => print('Key config fetched');
+  
+  @override
+  void onKeyConfigCacheHit() => print('Using cached key config');
+  
+  @override
+  void onPostToGateway() => print('Posting to gateway');
+  
+  @override
+  void onDecapsulationError([Object? error]) => print('Decapsulation failed: $error');
+  
+  @override
+  void onGatewayError([Object? error]) => print('Gateway error: $error');
+  
+  @override
+  void onCacheInvalidated() => print('Cache invalidated');
+  
+  @override
+  void onEncapsulationError([Object? error]) => print('Encapsulation failed: $error');
+}
+
+final session = OhttpSession.withTransport(
+  transport: transport,
+  observer: MyObserver(),
+);
+```
+
+Observer methods have no-op defaults, so you only override the events you care about.
+Observer errors are suppressed via `notifySafe()` — they never affect the OHTTP pipeline.
+
 ## Project Structure
 
 ```
 lib/
-├── ohttp_dart.dart                     # Core library entry point
-├── http.dart                           # Optional http adapter entry point
+├── ohttp_dart.dart                     # Core library entry point (transport-agnostic)
+├── http.dart                           # Optional package:http adapter entry point
 └── src/
     ├── bhttp.dart                      # Binary HTTP (RFC 9292)
     ├── bhttp_response_limits.dart      # Response size limits configuration
     ├── cipher_suite.dart               # Cipher suite constants
     ├── exceptions.dart                 # Sealed exception hierarchy
     ├── hpke.dart                       # HPKE Base Mode Sender (RFC 9180)
-    ├── key_config_cache.dart           # TTL cache with single-flight
+    ├── key_config_cache.dart           # TTL cache with single-flight for key configs
     ├── ohttp.dart                      # OHTTP encap/decap + KeyConfig (RFC 9458)
     ├── ohttp_data.dart                 # Request / response data types
+    ├── ohttp_observer.dart             # Lifecycle event observer interface
     ├── ohttp_session.dart              # OHTTP session orchestrator
     ├── ohttp_transport.dart            # Transport abstraction interface
+    ├── wipe_bytes_extension.dart      # Secure memory wipe utility
     └── adapters/
         └── http/
-            ├── http_client_transport.dart  # HttpClientTransport
-            └── ohttp_http_client.dart      # OhttpHttpClient (BaseClient)
+            ├── http_client_transport.dart   # HttpClientTransport implementation
+            └── ohttp_http_client.dart       # OhttpHttpClient drop-in replacement
 ```
 
 ## Error Handling
@@ -71,16 +110,16 @@ Specific exception types:
 
 | Type | When |
 |---|---|
-| `OhttpConfigException` | Invalid request/URL config (non-HTTPS scheme, bad authority) |
+| `OhttpConfigException` | Invalid request/URL config (non-HTTPS scheme, bad authority, negative limits) |
 | `OhttpUnsupportedSuiteException` | KeyConfig advertises only unsupported KEM/KDF/AEAD |
 | `OhttpKeyConfigException` | Structurally malformed KeyConfig binary data (too short, wrong lengths, trailing data) |
 | `OhttpFormatException` | Malformed BHTTP data (wrong framing indicator, truncated fields, invalid varint) |
 | `OhttpGatewayException` | Gateway returned non-2xx response (includes `statusCode`; triggers cache invalidation) |
 | `OhttpDecapsulationException` | OHTTP response decapsulation failure (response too short, ciphertext too short for GCM tag) |
-| `OhttpCryptoException` | AES-GCM / HPKE crypto failure (wraps underlying `cause`) |
+| `OhttpCryptoException` | AES-GCM / HPKE crypto failure (includes optional `cause`) |
 | `OhttpSizeLimitException` | Response exceeds configured size limits (includes `limit` and `actualSize`) |
-| `OhttpNetworkException` | Network-level error — DNS, connection refused, etc. (wraps underlying `cause`) |
-| `OhttpTimeoutException` | HTTP request exceeded configured timeout (includes `timeout` duration and `url`) |
+| `OhttpNetworkException` | Network-level error — DNS, connection refused, etc. (includes optional `cause`) |
+| `OhttpTimeoutException` | HTTP request exceeded configured timeout (includes `timeout` duration and optional `url`) |
 
 ## Usage
 
@@ -205,7 +244,14 @@ class DioTransport implements OhttpTransport {
 dart test
 ```
 
-Tests cover RFC test vectors for HPKE (RFC 9180 Appendix A.1), HKDF (RFC 5869), OHTTP encapsulation/decapsulation, and BHTTP encoding/decoding.
+Tests cover:
+- RFC test vectors for HPKE (RFC 9180 Appendix A.1), HKDF (RFC 5869)
+- OHTTP encapsulation/decapsulation (RFC 9458)
+- BHTTP encoding/decoding (RFC 9292)
+- Key config TTL cache with single-flight deduplication
+- Observer lifecycle events and error suppression
+- Session orchestration and pipeline integration
+- `package:http` adapter integration
 
 ## License
 
