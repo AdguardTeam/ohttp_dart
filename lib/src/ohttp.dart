@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 
 import 'cipher_suite.dart';
+import 'erasable_byte_array.dart';
 import 'exceptions.dart';
 import 'hpke.dart';
 import 'wipe_bytes_extension.dart';
@@ -175,10 +176,10 @@ class OhttpEncapsulateResult {
   final Uint8List encRequest;
 
   /// The 32-byte HPKE enc value (needed for response decapsulation).
-  final Uint8List enc;
+  final ErasableByteArray enc;
 
   /// The exported secret (needed for response decapsulation).
-  final Uint8List exportedSecret;
+  final ErasableByteArray exportedSecret;
 
   /// Creates an OHTTP encapsulation result.
   OhttpEncapsulateResult({
@@ -191,8 +192,8 @@ class OhttpEncapsulateResult {
   /// `encRequest` is NOT zeroed — it has already been sent over the network.
   /// Call after the response has been successfully decapsulated.
   void dispose() {
-    enc.wipeBytes();
-    exportedSecret.wipeBytes();
+    enc.erase();
+    exportedSecret.erase();
   }
 }
 
@@ -240,8 +241,8 @@ Future<OhttpEncapsulateResult> ohttpEncapsulate(
 
     return OhttpEncapsulateResult(
       encRequest: encRequest,
-      enc: ctx.enc,
-      exportedSecret: exportedSecret,
+      enc: ErasableByteArray(ctx.enc),
+      exportedSecret: ErasableByteArray(exportedSecret),
     );
   } finally {
     ctx.dispose();

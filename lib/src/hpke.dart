@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 
 import 'cipher_suite.dart';
+import 'erasable_byte_array.dart';
 import 'exceptions.dart';
 import 'wipe_bytes_extension.dart';
 
@@ -55,9 +56,9 @@ class HpkeSender {
 
       return HpkeSenderContext._(
         enc: enc,
-        key: key,
-        baseNonce: baseNonce,
-        exporterSecret: exporterSecret,
+        key: ErasableByteArray(key),
+        baseNonce: ErasableByteArray(baseNonce),
+        exporterSecret: ErasableByteArray(exporterSecret),
       );
     } finally {
       sharedSecret.wipeBytes();
@@ -324,13 +325,13 @@ class HpkeSenderContext {
   final Uint8List enc;
 
   /// AEAD encryption key derived by HPKE key schedule.
-  final Uint8List key;
+  final ErasableByteArray key;
 
   /// AEAD base nonce derived by HPKE key schedule.
-  final Uint8List baseNonce;
+  final ErasableByteArray baseNonce;
 
   /// Exporter secret for further key derivation (RFC 9180 §5.1).
-  final Uint8List exporterSecret;
+  final ErasableByteArray exporterSecret;
 
   HpkeSenderContext._({
     required this.enc,
@@ -346,7 +347,7 @@ class HpkeSenderContext {
   /// Each call increments the internal sequence counter (RFC 9180 §5.2).
   Future<Uint8List> seal(Uint8List aad, Uint8List plaintext) async {
     final nonce = _computeNonce();
-    final secretKey = SecretKeyData(key);
+    final secretKey = SecretKeyData(key.bytes);
     try {
       final secretBox = await HpkeSender._aesGcm.encrypt(
         plaintext,
@@ -373,7 +374,7 @@ class HpkeSenderContext {
   /// Export a secret from this HPKE context (RFC 9180 §5.3).
   Future<Uint8List> export(Uint8List exporterContext, int length) => HpkeSender._labeledExpand(
     HpkeSender._hpkeSuiteId,
-    exporterSecret,
+    exporterSecret.bytes,
     utf8.encode('sec'),
     exporterContext,
     length,
@@ -383,9 +384,9 @@ class HpkeSenderContext {
   /// The `enc` (public key) is NOT zeroed — it is an ephemeral public key
   /// transmitted in the clear in the encapsulated request.
   void dispose() {
-    key.wipeBytes();
-    baseNonce.wipeBytes();
-    exporterSecret.wipeBytes();
+    key.erase();
+    baseNonce.erase();
+    exporterSecret.erase();
   }
 
   /// Computes nonce = base_nonce XOR I2OSP(seq, Nn) and increments seq.
@@ -394,7 +395,7 @@ class HpkeSenderContext {
     if (_seq >= (1 << 32)) {
       throw const OhttpCryptoException('HPKE message limit reached');
     }
-    final nonce = Uint8List.fromList(baseNonce);
+    final nonce = Uint8List.fromList(baseNonce.bytes);
     // XOR seq (as big-endian) into the last bytes of nonce
     final s = _seq++;
     nonce[nonce.length - 1] ^= s & 0xFF;
