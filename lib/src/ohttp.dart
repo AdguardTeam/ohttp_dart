@@ -4,9 +4,9 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 
 import 'cipher_suite.dart';
+import 'erasable_byte_array.dart';
 import 'exceptions.dart';
 import 'hpke.dart';
-import 'wipe_bytes_extension.dart';
 
 // ---------------------------------------------------------------------------
 // OHTTP KeyConfig (RFC 9458 §3)
@@ -175,10 +175,10 @@ class OhttpEncapsulateResult {
   final Uint8List encRequest;
 
   /// The 32-byte HPKE enc value (needed for response decapsulation).
-  final Uint8List enc;
+  final ErasableByteArray enc;
 
   /// The exported secret (needed for response decapsulation).
-  final Uint8List exportedSecret;
+  final ErasableByteArray exportedSecret;
 
   /// Creates an OHTTP encapsulation result.
   OhttpEncapsulateResult({
@@ -191,8 +191,8 @@ class OhttpEncapsulateResult {
   /// `encRequest` is NOT zeroed — it has already been sent over the network.
   /// Call after the response has been successfully decapsulated.
   void dispose() {
-    enc.wipeBytes();
-    exportedSecret.wipeBytes();
+    enc.erase();
+    exportedSecret.erase();
   }
 }
 
@@ -240,8 +240,8 @@ Future<OhttpEncapsulateResult> ohttpEncapsulate(
 
     return OhttpEncapsulateResult(
       encRequest: encRequest,
-      enc: ctx.enc,
-      exportedSecret: exportedSecret,
+      enc: ErasableByteArray(ctx.enc),
+      exportedSecret: ErasableByteArray(exportedSecret),
     );
   } finally {
     ctx.dispose();
@@ -273,24 +273,32 @@ Future<Uint8List> ohttpDecapsulate(
   final salt = Uint8List.fromList([...enc, ...responseNonce]);
 
   // prk = HKDF-Extract(salt, secret) — plain HKDF, not labeled
-  final prk = await HpkeSender.hkdfExtract(salt, exportedSecret);
+  final prk = ErasableByteArray(await HpkeSender.hkdfExtract(salt, exportedSecret));
 
-  // key = HKDF-Expand(prk, "key", Nk)
-  final aeadKey = await HpkeSender.hkdfExpand(
-    prk,
-    Uint8List.fromList(utf8.encode('key')),
-    CipherSuite.aeadKeyLength,
-  );
+  final ErasableByteArray aeadKey;
+  final ErasableByteArray aeadNonce;
+  try {
+    // key = HKDF-Expand(prk, "key", Nk)
+    aeadKey = ErasableByteArray(
+      await HpkeSender.hkdfExpand(
+        prk.bytes,
+        Uint8List.fromList(utf8.encode('key')),
+        CipherSuite.aeadKeyLength,
+      ),
+    );
 
-  // nonce = HKDF-Expand(prk, "nonce", Nn)
-  final aeadNonce = await HpkeSender.hkdfExpand(
-    prk,
-    Uint8List.fromList(utf8.encode('nonce')),
-    CipherSuite.aeadNonceLength,
-  );
-
-  // Zero out intermediate PRK after key derivation
-  prk.wipeBytes();
+    // nonce = HKDF-Expand(prk, "nonce", Nn)
+    aeadNonce = ErasableByteArray(
+      await HpkeSender.hkdfExpand(
+        prk.bytes,
+        Uint8List.fromList(utf8.encode('nonce')),
+        CipherSuite.aeadNonceLength,
+      ),
+    );
+  } finally {
+    // Zero out intermediate PRK after key derivation
+    prk.erase();
+  }
 
   try {
     // AES-128-GCM decrypt with empty AAD
@@ -305,8 +313,8 @@ Future<Uint8List> ohttpDecapsulate(
     final tag = ciphertext.sublist(ciphertext.length - tagLen);
 
     final aesGcm = AesGcm.with128bits();
-    final secretBox = SecretBox(ct, nonce: aeadNonce, mac: Mac(tag));
-    final secretKey = SecretKeyData(aeadKey);
+    final secretBox = SecretBox(ct, nonce: aeadNonce.bytes, mac: Mac(tag));
+    final secretKey = SecretKeyData(aeadKey.bytes);
     final List<int> plaintext;
     try {
       plaintext = await aesGcm.decrypt(
@@ -326,8 +334,8 @@ Future<Uint8List> ohttpDecapsulate(
 
     return Uint8List.fromList(plaintext);
   } finally {
-    aeadKey.wipeBytes();
-    aeadNonce.wipeBytes();
+    aeadKey.erase();
+    aeadNonce.erase();
   }
 }
 

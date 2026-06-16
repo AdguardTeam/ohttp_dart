@@ -141,8 +141,8 @@ class OhttpSession {
       final Uint8List binaryResponse;
       try {
         binaryResponse = await ohttpDecapsulate(
-          encapsulated.enc,
-          encapsulated.exportedSecret,
+          encapsulated.enc.bytes,
+          encapsulated.exportedSecret.bytes,
           encResponse,
         );
       } on OhttpException catch (e) {

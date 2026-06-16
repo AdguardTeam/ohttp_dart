@@ -8,12 +8,12 @@ import 'test_utils.dart';
 /// Fake transport that records calls and can be instructed to succeed or fail.
 class _FakeTransport implements OhttpTransport {
   final Uint8List config;
-  Uint8List? responseBody;
-
   _FakeTransport([Uint8List? config]) : config = config ?? validKeyConfig();
 
   int fetchCount = 0;
+
   int postCount = 0;
+  Uint8List? responseBody;
 
   Uint8List? lastPostBody;
 

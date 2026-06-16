@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 import 'package:ohttp_dart/ohttp_dart.dart';
 import 'package:ohttp_dart/src/cipher_suite.dart';
-import 'package:ohttp_dart/src/wipe_bytes_extension.dart';
 import 'package:test/test.dart';
 
 /// Helper: hex string → Uint8List.
@@ -98,9 +97,9 @@ void main() {
         );
 
         expect(_toHex(ctx.enc), _toHex(pkEm));
-        expect(_toHex(ctx.key), expectedKey);
-        expect(_toHex(ctx.baseNonce), expectedBaseNonce);
-        expect(_toHex(ctx.exporterSecret), expectedExporterSecret);
+        expect(_toHex(ctx.key.bytes), expectedKey);
+        expect(_toHex(ctx.baseNonce.bytes), expectedBaseNonce);
+        expect(_toHex(ctx.exporterSecret.bytes), expectedExporterSecret);
       },
     );
 
@@ -309,16 +308,16 @@ void main() {
       );
 
       // Verify data is non-zero before dispose
-      expect(ctx.key.any((b) => b != 0), isTrue);
-      expect(ctx.baseNonce.any((b) => b != 0), isTrue);
-      expect(ctx.exporterSecret.any((b) => b != 0), isTrue);
+      expect(ctx.key.bytes.any((b) => b != 0), isTrue);
+      expect(ctx.baseNonce.bytes.any((b) => b != 0), isTrue);
+      expect(ctx.exporterSecret.bytes.any((b) => b != 0), isTrue);
 
       ctx.dispose();
 
-      // Verify data is zeroed
-      expect(ctx.key.every((b) => b == 0), isTrue);
-      expect(ctx.baseNonce.every((b) => b == 0), isTrue);
-      expect(ctx.exporterSecret.every((b) => b == 0), isTrue);
+      // Verify fields are erased — accessing bytes throws StateError
+      expect(() => ctx.key.bytes, throwsStateError);
+      expect(() => ctx.baseNonce.bytes, throwsStateError);
+      expect(() => ctx.exporterSecret.bytes, throwsStateError);
     });
 
     test('does not zero enc (public key)', () async {
@@ -341,9 +340,9 @@ void main() {
   });
 
   group('_kemEncap dh wipe regression', () {
-    test('wipeBytes zeroes Uint8List contents', () {
+    test('erase zeroes Uint8List contents via ErasableByteArray', () {
       final data = Uint8List.fromList(List.filled(32, 0x42));
-      data.wipeBytes();
+      ErasableByteArray(data).erase();
       expect(data.every((b) => b == 0), isTrue);
     });
   });
