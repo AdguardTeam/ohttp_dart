@@ -220,6 +220,73 @@ void main() {
         throwsA(isA<OhttpFormatException>()),
       );
     });
+
+    // RFC 9292 §3.3: only framing=1 (known-length response) is accepted.
+    // Indicators 2 and 3 (indeterminate-length) are defined but unsupported;
+    // indicator 4 and above are invalid per the RFC.
+    for (final indicator in [2, 3]) {
+      test('rejects unsupported indeterminate-length framing indicator $indicator (RFC 9292 §3.3)', () {
+        final buf = BytesBuilder();
+        buf.add(encodeVarint(indicator));
+        buf.add(encodeVarint(200));
+        buf.add(encodeVarint(0));
+        buf.add(encodeVarint(0));
+
+        expect(
+          () => parseResponse(
+            buf.toBytes(),
+            limits: const BhttpResponseLimits(),
+          ),
+          throwsA(
+            isA<OhttpFormatException>().having(
+              (e) => e.message,
+              'message',
+              contains('got $indicator'),
+            ),
+          ),
+        );
+      });
+    }
+
+    test('rejects unknown framing indicator 4 (RFC 9292 §3.3)', () {
+      const indicator = 4;
+      final buf = BytesBuilder();
+      buf.add(encodeVarint(indicator));
+      buf.add(encodeVarint(200));
+      buf.add(encodeVarint(0));
+      buf.add(encodeVarint(0));
+
+      expect(
+        () => parseResponse(
+          buf.toBytes(),
+          limits: const BhttpResponseLimits(),
+        ),
+        throwsA(
+          isA<OhttpFormatException>().having(
+            (e) => e.message,
+            'message',
+            contains('got $indicator'),
+          ),
+        ),
+      );
+    });
+
+    test('rejects large varint framing indicator (RFC 9292 §3.3)', () {
+      // 8-byte varint encoding of value 0x40000000 (invalid per RFC 9292 §3.3)
+      final buf = BytesBuilder();
+      buf.add(encodeVarint(0x40000000)); // 8-byte varint, framing indicator ≥ 4
+      buf.add(encodeVarint(200));
+      buf.add(encodeVarint(0));
+      buf.add(encodeVarint(0));
+
+      expect(
+        () => parseResponse(
+          buf.toBytes(),
+          limits: const BhttpResponseLimits(),
+        ),
+        throwsA(isA<OhttpFormatException>()),
+      );
+    });
   });
 
   group('serialize/parse roundtrip', () {
