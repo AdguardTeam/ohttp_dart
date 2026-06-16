@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 import 'package:ohttp_dart/ohttp_dart.dart';
 import 'package:ohttp_dart/src/cipher_suite.dart';
-import 'package:ohttp_dart/src/wipe_bytes_extension.dart';
 import 'package:test/test.dart';
 
 /// Helper: hex string → Uint8List.
@@ -341,9 +340,9 @@ void main() {
   });
 
   group('_kemEncap dh wipe regression', () {
-    test('wipeBytes zeroes Uint8List contents', () {
+    test('erase zeroes Uint8List contents via ErasableByteArray', () {
       final data = Uint8List.fromList(List.filled(32, 0x42));
-      data.wipeBytes();
+      ErasableByteArray(data).erase();
       expect(data.every((b) => b == 0), isTrue);
     });
   });

@@ -6,7 +6,6 @@ import 'package:cryptography/cryptography.dart';
 import 'cipher_suite.dart';
 import 'erasable_byte_array.dart';
 import 'exceptions.dart';
-import 'wipe_bytes_extension.dart';
 
 /// HPKE Base Mode Sender (RFC 9180) for the cipher suite:
 ///   KEM = DHKEM(X25519, HKDF-SHA256) (0x0020)
@@ -50,7 +49,7 @@ class HpkeSender {
     );
     try {
       final (key, baseNonce, exporterSecret) = await _keySchedule(
-        sharedSecret,
+        sharedSecret.bytes,
         info,
       );
 
@@ -61,7 +60,7 @@ class HpkeSender {
         exporterSecret: ErasableByteArray(exporterSecret),
       );
     } finally {
-      sharedSecret.wipeBytes();
+      sharedSecret.erase();
     }
   }
 
@@ -99,18 +98,18 @@ class HpkeSender {
     try {
       const hashLen = CipherSuite.kdfHashLength;
       final n = (length + hashLen - 1) ~/ hashLen;
-      var t = Uint8List(0);
+      var t = ErasableByteArray(Uint8List(0));
       final okm = BytesBuilder();
       try {
         for (var i = 1; i <= n; i++) {
-          final input = Uint8List.fromList([...t, ...info, i]);
+          final input = Uint8List.fromList([...t.bytes, ...info, i]);
           final mac = await _hmac.calculateMac(
             input,
             secretKey: secretKey,
           );
-          t.wipeBytes();
-          t = Uint8List.fromList(mac.bytes);
-          okm.add(t);
+          t.erase();
+          t = ErasableByteArray(Uint8List.fromList(mac.bytes));
+          okm.add(t.bytes);
         }
         final okmBytes = Uint8List.fromList(okm.toBytes());
         try {
@@ -122,7 +121,7 @@ class HpkeSender {
           }
         }
       } finally {
-        t.wipeBytes();
+        t.erase();
       }
     } on Exception catch (e, st) {
       throw OhttpCryptoException(
@@ -137,7 +136,7 @@ class HpkeSender {
 
   // -- KEM Encap (RFC 9180 §4.1) --
 
-  static Future<(Uint8List sharedSecret, Uint8List enc)> _kemEncap(
+  static Future<(ErasableByteArray sharedSecret, Uint8List enc)> _kemEncap(
     Uint8List recipientPkBytes, {
     SimpleKeyPairData? testKeyPair,
   }) async {
@@ -164,18 +163,22 @@ class HpkeSender {
         keyPair: ephKp,
         remotePublicKey: recipientPk,
       );
-      final dh = Uint8List.fromList(await dhResult.extractBytes());
+      final dh = ErasableByteArray(
+        Uint8List.fromList(await dhResult.extractBytes()),
+      );
 
       // kem_context = enc || pkR
       final kemContext = Uint8List.fromList([...enc, ...recipientPkBytes]);
 
       // shared_secret = ExtractAndExpand(dh, kem_context)
       try {
-        final sharedSecret = await _extractAndExpand(dh, kemContext);
+        final sharedSecret = ErasableByteArray(
+          await _extractAndExpand(dh.bytes, kemContext),
+        );
 
         return (sharedSecret, enc);
       } finally {
-        dh.wipeBytes();
+        dh.erase();
       }
     } on OhttpCryptoException {
       rethrow;
@@ -192,23 +195,25 @@ class HpkeSender {
     Uint8List dh,
     Uint8List kemContext,
   ) async {
-    final prk = await _labeledExtract(
-      _kemSuiteId,
-      Uint8List(0),
-      utf8.encode('eae_prk'),
-      dh,
+    final prk = ErasableByteArray(
+      await _labeledExtract(
+        _kemSuiteId,
+        Uint8List(0),
+        utf8.encode('eae_prk'),
+        dh,
+      ),
     );
 
     try {
       return await _labeledExpand(
         _kemSuiteId,
-        prk,
+        prk.bytes,
         utf8.encode('shared_secret'),
         kemContext,
         CipherSuite.kemSharedSecretLength,
       );
     } finally {
-      prk.wipeBytes();
+      prk.erase();
     }
   }
 
@@ -236,17 +241,19 @@ class HpkeSender {
     final ksContext = Uint8List.fromList([0x00, ...pskIdHash, ...infoHash]);
 
     // secret = LabeledExtract(shared_secret, "secret", psk="")
-    final secret = await _labeledExtract(
-      _hpkeSuiteId,
-      sharedSecret,
-      utf8.encode('secret'),
-      Uint8List(0),
+    final secret = ErasableByteArray(
+      await _labeledExtract(
+        _hpkeSuiteId,
+        sharedSecret,
+        utf8.encode('secret'),
+        Uint8List(0),
+      ),
     );
 
     try {
       final key = await _labeledExpand(
         _hpkeSuiteId,
-        secret,
+        secret.bytes,
         utf8.encode('key'),
         ksContext,
         CipherSuite.aeadKeyLength,
@@ -254,7 +261,7 @@ class HpkeSender {
 
       final baseNonce = await _labeledExpand(
         _hpkeSuiteId,
-        secret,
+        secret.bytes,
         utf8.encode('base_nonce'),
         ksContext,
         CipherSuite.aeadNonceLength,
@@ -262,7 +269,7 @@ class HpkeSender {
 
       final exporterSecret = await _labeledExpand(
         _hpkeSuiteId,
-        secret,
+        secret.bytes,
         utf8.encode('exp'),
         ksContext,
         CipherSuite.kdfHashLength,
@@ -270,7 +277,7 @@ class HpkeSender {
 
       return (key, baseNonce, exporterSecret);
     } finally {
-      secret.wipeBytes();
+      secret.erase();
     }
   }
 
@@ -284,16 +291,18 @@ class HpkeSender {
     List<int> label,
     Uint8List ikm,
   ) async {
-    final labeledIkm = Uint8List.fromList([
-      ...utf8.encode('HPKE-v1'),
-      ...suiteId,
-      ...label,
-      ...ikm,
-    ]);
+    final labeledIkm = ErasableByteArray(
+      Uint8List.fromList([
+        ...utf8.encode('HPKE-v1'),
+        ...suiteId,
+        ...label,
+        ...ikm,
+      ]),
+    );
     try {
-      return await hkdfExtract(salt, labeledIkm);
+      return await hkdfExtract(salt, labeledIkm.bytes);
     } finally {
-      labeledIkm.wipeBytes();
+      labeledIkm.erase();
     }
   }
 
