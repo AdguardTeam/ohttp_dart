@@ -153,6 +153,46 @@ void main() {
       );
     });
 
+    test('accepts response exactly at maxEncryptedResponseBytes boundary', () async {
+      const limit = 500;
+      transport.responseBody = Uint8List(limit);
+
+      final limitedSession = OhttpSession(
+        transport: transport,
+        cache: KeyConfigCache(transport: transport),
+        maxEncryptedResponseBytes: limit,
+      );
+
+      // Will fail at decapsulation (fake bytes), but should NOT throw
+      // OhttpSizeLimitException — size == limit is allowed
+      await expectLater(
+        limitedSession.send(request),
+        throwsA(
+          isNot(isA<OhttpSizeLimitException>()),
+        ),
+      );
+    });
+
+    test('throws OhttpSizeLimitException when response is one byte over maxEncryptedResponseBytes', () async {
+      const limit = 500;
+      transport.responseBody = Uint8List(limit + 1);
+
+      final limitedSession = OhttpSession(
+        transport: transport,
+        cache: KeyConfigCache(transport: transport),
+        maxEncryptedResponseBytes: limit,
+      );
+
+      await expectLater(
+        limitedSession.send(request),
+        throwsA(
+          isA<OhttpSizeLimitException>()
+              .having((e) => e.limit, 'limit', limit)
+              .having((e) => e.actualSize, 'actualSize', limit + 1),
+        ),
+      );
+    });
+
     test('uses default maxEncryptedResponseBytes of 16 MiB', () async {
       // Response larger than 16 MiB should fail
       transport.responseBody = Uint8List(17 * 1024 * 1024); // 17 MiB
