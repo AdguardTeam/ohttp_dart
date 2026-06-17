@@ -126,7 +126,6 @@ class OhttpSession {
       } on OhttpGatewayException catch (e) {
         _observer?.notifySafe((o) => o.onGatewayError(e.statusCode));
         _cache.invalidate();
-        _observer?.notifySafe((o) => o.onCacheInvalidated());
         rethrow;
       }
 

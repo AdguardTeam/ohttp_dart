@@ -68,7 +68,10 @@ class KeyConfigCache {
 
   /// Evicts the cached configuration so that the next [get] performs a
   /// fresh fetch unconditionally.
-  void invalidate() => _cached = null;
+  void invalidate() {
+    _cached = null;
+    _observer?.notifySafe((o) => o.onCacheInvalidated());
+  }
 
   Future<OhttpKeyConfig> _fetch() async {
     final bytes = await _transport.fetchKeyConfig();

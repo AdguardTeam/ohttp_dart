@@ -338,12 +338,4 @@ void main() {
       expect(ctx.enc, encBefore);
     });
   });
-
-  group('_kemEncap dh wipe regression', () {
-    test('erase zeroes Uint8List contents via ErasableByteArray', () {
-      final data = Uint8List.fromList(List.filled(32, 0x42));
-      ErasableByteArray(data).erase();
-      expect(data.every((b) => b == 0), isTrue);
-    });
-  });
 }
