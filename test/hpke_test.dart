@@ -2,9 +2,10 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
-import 'package:glados/glados.dart';
+import 'package:kiri_check/kiri_check.dart';
 import 'package:ohttp_dart/ohttp_dart.dart';
 import 'package:ohttp_dart/src/cipher_suite.dart';
+import 'package:test/test.dart';
 
 /// Helper: hex string → Uint8List.
 Uint8List _hex(String hex) {
@@ -243,22 +244,24 @@ void main() {
     });
 
     // Sizes are constants of the ciphersuite, independent of info (RFC 9180 §4, §5.1).
-    Glados(any.list<int>(any.intInRange(0, 256))).test(
-      'enc=32B, key=16B, base_nonce=12B, exporter_secret=32B for any info',
-      (infoList) async {
-        final x = X25519();
-        final kp = await x.newKeyPair();
-        final pk = await kp.extractPublicKey();
-        final ctx = await HpkeSender.setupBaseS(
-          Uint8List.fromList(pk.bytes),
-          Uint8List.fromList(infoList),
-        );
-        expect(ctx.enc.length, CipherSuite.kemPublicKeyLength);
-        expect(ctx.key.bytes.length, CipherSuite.aeadKeyLength);
-        expect(ctx.baseNonce.bytes.length, CipherSuite.aeadNonceLength);
-        expect(ctx.exporterSecret.bytes.length, CipherSuite.kdfHashLength);
-      },
-    );
+    property('enc=32B, key=16B, base_nonce=12B, exporter_secret=32B for any info', () {
+      forAll(
+        list(integer(min: 0, max: 255)),
+        (infoList) async {
+          final x = X25519();
+          final kp = await x.newKeyPair();
+          final pk = await kp.extractPublicKey();
+          final ctx = await HpkeSender.setupBaseS(
+            Uint8List.fromList(pk.bytes),
+            Uint8List.fromList(infoList),
+          );
+          expect(ctx.enc.length, CipherSuite.kemPublicKeyLength);
+          expect(ctx.key.bytes.length, CipherSuite.aeadKeyLength);
+          expect(ctx.baseNonce.bytes.length, CipherSuite.aeadNonceLength);
+          expect(ctx.exporterSecret.bytes.length, CipherSuite.kdfHashLength);
+        },
+      );
+    });
   });
 
   group('HKDF RFC 5869 test vectors', () {
@@ -314,72 +317,84 @@ void main() {
     });
 
     // RFC 5869 §2.2: PRK is always HashLen octets, regardless of input sizes.
-    Glados2(
-      any.list<int>(any.intInRange(0, 256)),
-      any.list<int>(any.intInRange(0, 256)),
-    ).test(
-      'output is always Nh=32 bytes for any salt and ikm',
-      (saltList, ikmList) async {
-        final prk = await HpkeSender.hkdfExtract(
-          Uint8List.fromList(saltList),
-          Uint8List.fromList(ikmList),
-        );
-        expect(prk.length, CipherSuite.kdfHashLength);
-      },
-    );
+    property('output is always Nh=32 bytes for any salt and ikm', () {
+      forAll(
+        combine2(
+          list(integer(min: 0, max: 255)),
+          list(integer(min: 0, max: 255)),
+        ),
+        (args) async {
+          final (saltList, ikmList) = args;
+          final prk = await HpkeSender.hkdfExtract(
+            Uint8List.fromList(saltList),
+            Uint8List.fromList(ikmList),
+          );
+          expect(prk.length, CipherSuite.kdfHashLength);
+        },
+      );
+    });
 
     // RFC 5869 §2.2: PRK = HMAC-Hash(salt, IKM) is a pure function of its inputs.
-    Glados2(
-      any.list<int>(any.intInRange(0, 256)),
-      any.list<int>(any.intInRange(0, 256)),
-    ).test(
-      'same (salt, ikm) always produces the same PRK (determinism)',
-      (saltList, ikmList) async {
-        final salt = Uint8List.fromList(saltList);
-        final ikm = Uint8List.fromList(ikmList);
-        final prk1 = await HpkeSender.hkdfExtract(salt, ikm);
-        final prk2 = await HpkeSender.hkdfExtract(salt, ikm);
-        expect(prk1, equals(prk2));
-      },
-    );
+    property('same (salt, ikm) always produces the same PRK (determinism)', () {
+      forAll(
+        combine2(
+          list(integer(min: 0, max: 255)),
+          list(integer(min: 0, max: 255)),
+        ),
+        (args) async {
+          final (saltList, ikmList) = args;
+          final salt = Uint8List.fromList(saltList);
+          final ikm = Uint8List.fromList(ikmList);
+          final prk1 = await HpkeSender.hkdfExtract(salt, ikm);
+          final prk2 = await HpkeSender.hkdfExtract(salt, ikm);
+          expect(prk1, equals(prk2));
+        },
+      );
+    });
 
     // RFC 5869 §2.3: L ≤ 255*HashLen and OKM is "of L octets".
-    Glados2(
-      any.list<int>(any.intInRange(0, 256)),
-      any.intInRange(1, 255 * CipherSuite.kdfHashLength + 1),
-    ).test(
-      'output length equals requested L for any valid L and any info',
-      (infoList, l) async {
-        final prk = Uint8List(CipherSuite.kdfHashLength);
-        final okm = await HpkeSender.hkdfExpand(
-          prk,
-          Uint8List.fromList(infoList),
-          l,
-        );
-        expect(okm.length, l);
-      },
-    );
+    property('output length equals requested L for any valid L and any info', () {
+      forAll(
+        combine2(
+          list(integer(min: 0, max: 255)),
+          integer(min: 1, max: 255 * CipherSuite.kdfHashLength),
+        ),
+        (args) async {
+          final (infoList, l) = args;
+          final prk = Uint8List(CipherSuite.kdfHashLength);
+          final okm = await HpkeSender.hkdfExpand(
+            prk,
+            Uint8List.fromList(infoList),
+            l,
+          );
+          expect(okm.length, l);
+        },
+      );
+    });
 
     // RFC 5869 §2.3: OKM = first L octets of (T(1) || T(2) || ...).
-    Glados3(
-      any.list<int>(any.intInRange(0, 256)),
-      any.intInRange(1, 255),
-      any.intInRange(1, 255),
-    ).test(
-      'shorter output is a prefix of longer output for the same PRK and info',
-      (infoList, l1Raw, l2Raw) async {
-        if (l1Raw == l2Raw) {
-          return;
-        }
-        final l1 = l1Raw < l2Raw ? l1Raw : l2Raw;
-        final l2 = l1Raw < l2Raw ? l2Raw : l1Raw;
-        final prk = Uint8List(CipherSuite.kdfHashLength);
-        final info = Uint8List.fromList(infoList);
-        final short = await HpkeSender.hkdfExpand(prk, info, l1);
-        final long = await HpkeSender.hkdfExpand(prk, info, l2);
-        expect(long.sublist(0, l1), equals(short));
-      },
-    );
+    property('shorter output is a prefix of longer output for the same PRK and info', () {
+      forAll(
+        combine3(
+          list(integer(min: 0, max: 255)),
+          integer(min: 1, max: 254),
+          integer(min: 1, max: 254),
+        ),
+        (args) async {
+          final (infoList, l1Raw, l2Raw) = args;
+          if (l1Raw == l2Raw) {
+            return;
+          }
+          final l1 = l1Raw < l2Raw ? l1Raw : l2Raw;
+          final l2 = l1Raw < l2Raw ? l2Raw : l1Raw;
+          final prk = Uint8List(CipherSuite.kdfHashLength);
+          final info = Uint8List.fromList(infoList);
+          final short = await HpkeSender.hkdfExpand(prk, info, l1);
+          final long = await HpkeSender.hkdfExpand(prk, info, l2);
+          expect(long.sublist(0, l1), equals(short));
+        },
+      );
+    });
   });
 
   group('HpkeSenderContext.dispose', () {
@@ -488,42 +503,46 @@ void main() {
     });
 
     // RFC 9180 §5.2: ciphertext = Seal(key, nonce, aad, pt), length is pt.length + Nt.
-    Glados(any.list<int>(any.intInRange(0, 256))).test(
-      'ciphertext length equals plaintext.length + Nt=16 for any plaintext',
-      (ptList) async {
-        final x = X25519();
-        final kp = await x.newKeyPair();
-        final pk = await kp.extractPublicKey();
-        final ctx = await HpkeSender.setupBaseS(
-          Uint8List.fromList(pk.bytes),
-          Uint8List.fromList(utf8.encode('seal-length-prop')),
-        );
-        final ct = await ctx.seal(Uint8List(0), Uint8List.fromList(ptList));
-        expect(ct.length, ptList.length + CipherSuite.aeadTagLength);
-      },
-    );
+    property('ciphertext length equals plaintext.length + Nt=16 for any plaintext', () {
+      forAll(
+        list(integer(min: 0, max: 255)),
+        (ptList) async {
+          final x = X25519();
+          final kp = await x.newKeyPair();
+          final pk = await kp.extractPublicKey();
+          final ctx = await HpkeSender.setupBaseS(
+            Uint8List.fromList(pk.bytes),
+            Uint8List.fromList(utf8.encode('seal-length-prop')),
+          );
+          final ct = await ctx.seal(Uint8List(0), Uint8List.fromList(ptList));
+          expect(ct.length, ptList.length + CipherSuite.aeadTagLength);
+        },
+      );
+    });
 
     // RFC 9180 §5.2: nonce = base_nonce XOR seq, and seq is incremented on every Seal call.
-    Glados(any.intInRange(2, 16)).test(
-      'K sequential seal calls with equal plaintext/AAD produce K distinct ciphertexts',
-      (k) async {
-        final x = X25519();
-        final kp = await x.newKeyPair();
-        final pk = await kp.extractPublicKey();
-        final ctx = await HpkeSender.setupBaseS(
-          Uint8List.fromList(pk.bytes),
-          Uint8List.fromList(utf8.encode('seal-uniqueness-prop')),
-        );
-        final pt = Uint8List.fromList([0xAB, 0xCD]);
-        final aad = Uint8List(0);
-        final seen = <String>{};
-        for (var i = 0; i < k; i++) {
-          final ct = await ctx.seal(aad, pt);
-          seen.add(_toHex(ct));
-        }
-        expect(seen.length, k, reason: 'all $k ciphertexts must be distinct');
-      },
-    );
+    property('K sequential seal calls with equal plaintext/AAD produce K distinct ciphertexts', () {
+      forAll(
+        integer(min: 2, max: 15),
+        (k) async {
+          final x = X25519();
+          final kp = await x.newKeyPair();
+          final pk = await kp.extractPublicKey();
+          final ctx = await HpkeSender.setupBaseS(
+            Uint8List.fromList(pk.bytes),
+            Uint8List.fromList(utf8.encode('seal-uniqueness-prop')),
+          );
+          final pt = Uint8List.fromList([0xAB, 0xCD]);
+          final aad = Uint8List(0);
+          final seen = <String>{};
+          for (var i = 0; i < k; i++) {
+            final ct = await ctx.seal(aad, pt);
+            seen.add(_toHex(ct));
+          }
+          expect(seen.length, k, reason: 'all $k ciphertexts must be distinct');
+        },
+      );
+    });
   });
 
   // RFC 9180 §7.1.4 + RFC 7748 §6.1: the DH result MUST NOT be the all-zero value.
@@ -616,22 +635,25 @@ void main() {
 
     // RFC 9180 §5.3: Export delegates to LabeledExpand(exporter_secret, "sec", ctx, L),
     // which forwards L to HKDF-Expand (RFC 5869 §2.3).
-    Glados2(
-      any.list<int>(any.intInRange(0, 256)),
-      any.intInRange(1, 255 * CipherSuite.kdfHashLength + 1),
-    ).test(
-      'output length equals requested L for any exporter context and valid L',
-      (exportCtxList, l) async {
-        final x = X25519();
-        final kp = await x.newKeyPair();
-        final pk = await kp.extractPublicKey();
-        final senderCtx = await HpkeSender.setupBaseS(
-          Uint8List.fromList(pk.bytes),
-          Uint8List.fromList(utf8.encode('export-length-prop')),
-        );
-        final exported = await senderCtx.export(Uint8List.fromList(exportCtxList), l);
-        expect(exported.length, l);
-      },
-    );
+    property('output length equals requested L for any exporter context and valid L', () {
+      forAll(
+        combine2(
+          list(integer(min: 0, max: 255)),
+          integer(min: 1, max: 255 * CipherSuite.kdfHashLength),
+        ),
+        (args) async {
+          final (exportCtxList, l) = args;
+          final x = X25519();
+          final kp = await x.newKeyPair();
+          final pk = await kp.extractPublicKey();
+          final senderCtx = await HpkeSender.setupBaseS(
+            Uint8List.fromList(pk.bytes),
+            Uint8List.fromList(utf8.encode('export-length-prop')),
+          );
+          final exported = await senderCtx.export(Uint8List.fromList(exportCtxList), l);
+          expect(exported.length, l);
+        },
+      );
+    });
   });
 }
