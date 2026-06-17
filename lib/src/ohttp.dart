@@ -224,7 +224,16 @@ Future<OhttpEncapsulateResult> ohttpEncapsulate(
   );
 
   try {
-    // Seal with empty AAD (per reference Go implementation, not RFC header)
+    // RFC 9458 §4.3 mandates an empty AAD: ct = sctxt.Seal("", request).
+    //
+    // The framing header (key_id, kem_id, kdf_id, aead_id) is
+    // already bound to the ciphertext via the HPKE info string constructed
+    // in step 2 of §4.3. Using the header as AAD as well would contradict
+    // the pseudocode and break interoperability with conformant gateways.
+    //
+    // Compatibility note: the bundled RFC test vectors assume empty AAD.
+    // Any change to this value requires coordinated updates to the gateway
+    // implementation and to the test vectors.
     final ct = await ctx.seal(Uint8List(0), binaryRequest);
 
     // Export secret for response decryption
