@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:glados/glados.dart';
 import 'package:ohttp_dart/ohttp_dart.dart';
-import 'package:test/test.dart';
 
 void main() {
   group('varint encoding', () {
@@ -27,6 +27,32 @@ void main() {
       final encoded2 = encodeVarint(1073741823);
       expect(encoded2, [0xBF, 0xFF, 0xFF, 0xFF]);
     });
+
+    // RFC 9000 §16: the two top bits of the first byte encode the length category.
+    Glados(any.intInRange(0, 64)).test(
+      'first-byte top 2 bits are 0b00 for 1-byte values',
+      (value) => expect(encodeVarint(value)[0] >> 6, 0),
+    );
+
+    Glados(any.intInRange(64, 16384)).test(
+      'first-byte top 2 bits are 0b01 for 2-byte values',
+      (value) => expect(encodeVarint(value)[0] >> 6, 1),
+    );
+
+    Glados(any.intInRange(16384, 0x40000000)).test(
+      'first-byte top 2 bits are 0b10 for 4-byte values',
+      (value) => expect(encodeVarint(value)[0] >> 6, 2),
+    );
+
+    Glados(any.intInRange(-0x8000000000000000, -1)).test(
+      'throws OhttpFormatException for all negative values',
+      (value) => expect(() => encodeVarint(value), throwsA(isA<OhttpFormatException>())),
+    );
+
+    Glados(any.intInRange(0x4000000000000000, 0x7FFFFFFFFFFFFFFF)).test(
+      'throws OhttpFormatException for all values ≥ 2^62',
+      (value) => expect(() => encodeVarint(value), throwsA(isA<OhttpFormatException>())),
+    );
   });
 
   group('varint decoding', () {
@@ -55,6 +81,39 @@ void main() {
       final data = Uint8List.fromList([0xFF, 0xFF, 0x05]);
       expect(decodeVarint(data, 2), (5, 1));
     });
+
+    // Range [0, 16384) covers the 1-byte and 2-byte varint ranges
+    // plus the 16383→16384 length-boundary (RFC 9000 §16).
+    Glados2(any.intInRange(0, 16384), any.intInRange(0, 10)).test(
+      'decode at arbitrary byte offset returns correct value and length',
+      (value, offset) {
+        final encoded = encodeVarint(value);
+        final data = Uint8List.fromList([...List.filled(offset, 0xFF), ...encoded]);
+        final (decoded, len) = decodeVarint(data, offset);
+        expect(decoded, value, reason: 'value=$value at offset=$offset');
+        expect(len, encoded.length);
+      },
+    );
+
+    // Range [0, 0x40000000) covers 1-byte, 2-byte, and 4-byte varint encodings
+    // (RFC 9000 §16). 8-byte varints are covered by the roundtrip group.
+    Glados(any.list<int>(any.intInRange(0, 0x40000000))).test(
+      'sequential concatenated varints decode without loss',
+      (values) {
+        final buf = BytesBuilder();
+        for (final v in values) {
+          buf.add(encodeVarint(v));
+        }
+        final data = buf.toBytes();
+        var offset = 0;
+        for (final expected in values) {
+          final (decoded, len) = decodeVarint(data, offset);
+          expect(decoded, expected);
+          offset += len;
+        }
+        expect(offset, data.length, reason: 'all bytes must be consumed after sequential decode');
+      },
+    );
   });
 
   group('varint roundtrip', () {
@@ -94,6 +153,51 @@ void main() {
       expect(decoded, value);
       expect(len, 8);
     });
+
+    Glados(any.intInRange(0, 64)).test(
+      'roundtrip: 1-byte values [0, 63]',
+      (value) {
+        final encoded = encodeVarint(value);
+        expect(encoded.length, 1, reason: 'value=$value must encode as 1 byte');
+        final (decoded, len) = decodeVarint(Uint8List.fromList(encoded), 0);
+        expect(decoded, value);
+        expect(len, 1);
+      },
+    );
+
+    Glados(any.intInRange(64, 16384)).test(
+      'roundtrip: 2-byte values [64, 16383]',
+      (value) {
+        final encoded = encodeVarint(value);
+        expect(encoded.length, 2, reason: 'value=$value must encode as 2 bytes');
+        final (decoded, len) = decodeVarint(Uint8List.fromList(encoded), 0);
+        expect(decoded, value);
+        expect(len, 2);
+      },
+    );
+
+    Glados(any.intInRange(16384, 0x40000000)).test(
+      'roundtrip: 4-byte values [16384, 0x3FFFFFFF]',
+      (value) {
+        final encoded = encodeVarint(value);
+        expect(encoded.length, 4, reason: 'value=$value must encode as 4 bytes');
+        final (decoded, len) = decodeVarint(Uint8List.fromList(encoded), 0);
+        expect(decoded, value);
+        expect(len, 4);
+      },
+    );
+
+    // 8-byte varint range: [0x40000000, 0x7FFFFFFF)
+    Glados(any.intInRange(0x40000000, 0x7FFFFFFF)).test(
+      'roundtrip: 8-byte values [0x40000000, 0x7FFFFFFE]',
+      (value) {
+        final encoded = encodeVarint(value);
+        expect(encoded.length, 8, reason: 'value=$value must encode as 8 bytes');
+        final (decoded, len) = decodeVarint(Uint8List.fromList(encoded), 0);
+        expect(decoded, value);
+        expect(len, 8);
+      },
+    );
   });
 
   group('serializeRequest', () {
@@ -118,21 +222,6 @@ void main() {
       expect(utf8.decode(data.sublist(offset, offset + methodLen)), 'GET');
     });
 
-    test('POST request with headers and body', () {
-      final body = utf8.encode('hello');
-      final data = serializeRequest(
-        method: 'POST',
-        scheme: 'https',
-        authority: 'example.com',
-        path: '/post',
-        headers: [('content-type', 'text/plain')],
-        body: Uint8List.fromList(body),
-      );
-
-      expect(data[0], 0x00); // framing indicator
-      expect(data.length > 10, true);
-    });
-
     test('headers are lowercased', () {
       final data = serializeRequest(
         method: 'GET',
@@ -148,6 +237,127 @@ void main() {
       expect(str.contains('content-type'), true);
       expect(str.contains('Content-Type'), false);
     });
+
+    test('trailing trailers varint is 0x00 (RFC 9292 §3.1)', () {
+      final data = serializeRequest(
+        method: 'POST',
+        scheme: 'https',
+        authority: 'example.com',
+        path: '/submit',
+        headers: [('content-type', 'application/json')],
+        body: Uint8List.fromList(utf8.encode('{"x":1}')),
+      );
+
+      // Navigate past framing(1) + 4 control fields + header section + body
+      var offset = 1;
+      for (var j = 0; j < 4; j++) {
+        final (fieldLen, fll) = decodeVarint(data, offset);
+        offset += fll + fieldLen;
+      }
+      final (headersLen, hll) = decodeVarint(data, offset);
+      offset += hll + headersLen;
+      final (bodyLen, bll) = decodeVarint(data, offset);
+      offset += bll + bodyLen;
+
+      // Trailers must be a single zero varint
+      final (trailersLen, tll) = decodeVarint(data, offset);
+      expect(trailersLen, 0, reason: 'trailing trailers length must be 0');
+      expect(offset + tll, data.length, reason: 'trailers must be the last field');
+    });
+
+    Glados(any.list<int>(any.intInRange(0, 256)).map(Uint8List.fromList)).test(
+      'framing indicator is always 0x00 for arbitrary body',
+      (body) {
+        final data = serializeRequest(
+          method: 'GET',
+          scheme: 'https',
+          authority: 'example.com',
+          path: '/',
+          headers: [],
+          body: body,
+        );
+        expect(data[0], 0x00);
+      },
+    );
+
+    Glados(any.nonEmptyLetterOrDigits).test(
+      'header name is lowercased in output',
+      (name) {
+        final data = serializeRequest(
+          method: 'GET',
+          scheme: 'https',
+          authority: 'example.com',
+          path: '/',
+          headers: [(name, 'value')],
+          body: Uint8List(0),
+        );
+        // Navigate past framing indicator + 4 control fields (method/scheme/authority/path)
+        var offset = 1;
+        for (var j = 0; j < 4; j++) {
+          final (fieldLen, fll) = decodeVarint(data, offset);
+          offset += fll + fieldLen;
+        }
+        // Header section length
+        final (_, hll) = decodeVarint(data, offset);
+        offset += hll;
+        // First header name
+        final (nameLen, nll) = decodeVarint(data, offset);
+        offset += nll;
+        final decodedName = utf8.decode(data.sublist(offset, offset + nameLen));
+        expect(decodedName, equals(name.toLowerCase()));
+      },
+    );
+
+    Glados(any.list<int>(any.intInRange(0, 256)).map(Uint8List.fromList)).test(
+      'body length varint matches actual body length',
+      (body) {
+        final data = serializeRequest(
+          method: 'GET',
+          scheme: 'https',
+          authority: 'example.com',
+          path: '/',
+          headers: [],
+          body: body,
+        );
+        // Navigate past: framing(1 byte) + 4 length-prefixed control fields + header section
+        var offset = 1; // framing indicator
+        for (var j = 0; j < 4; j++) {
+          // method, scheme, authority, path
+          final (fieldLen, fll) = decodeVarint(data, offset);
+          offset += fll + fieldLen;
+        }
+        final (headersLen, hll) = decodeVarint(data, offset);
+        offset += hll + headersLen;
+        final (encodedBodyLen, _) = decodeVarint(data, offset);
+        expect(encodedBodyLen, body.length);
+      },
+    );
+
+    Glados2(
+      any.nonEmptyLowercaseLetters,
+      any.list<int>(any.intInRange(0, 256)).map(Uint8List.fromList),
+    ).test(
+      'output is deterministic: same inputs produce identical bytes',
+      (path, body) {
+        final first = serializeRequest(
+          method: 'GET',
+          scheme: 'https',
+          authority: 'example.com',
+          path: '/$path',
+          headers: [],
+          body: body,
+        );
+        final second = serializeRequest(
+          method: 'GET',
+          scheme: 'https',
+          authority: 'example.com',
+          path: '/$path',
+          headers: [],
+          body: body,
+        );
+        expect(first, equals(second));
+      },
+    );
   });
 
   group('parseResponse', () {
@@ -274,7 +484,9 @@ void main() {
     test('rejects large varint framing indicator (RFC 9292 §3.3)', () {
       // 8-byte varint encoding of value 0x40000000 (invalid per RFC 9292 §3.3)
       final buf = BytesBuilder();
-      buf.add(encodeVarint(0x40000000)); // 8-byte varint, framing indicator ≥ 4
+      buf.add(
+        encodeVarint(0x40000000),
+      ); // invalid framing indicator (value 1073741824, must be 0 or 1 per RFC 9292 §3.3)
       buf.add(encodeVarint(200));
       buf.add(encodeVarint(0));
       buf.add(encodeVarint(0));
@@ -287,25 +499,153 @@ void main() {
         throwsA(isA<OhttpFormatException>()),
       );
     });
+
+    Glados(any.intInRange(200, 600)).test(
+      'status code is preserved for all valid codes 200–599',
+      (code) {
+        final resp = parseResponse(
+          _buildBhttpResponse(statusCode: code),
+          limits: const BhttpResponseLimits(),
+        );
+        expect(resp.statusCode, code);
+      },
+    );
+
+    Glados(any.list<int>(any.intInRange(0, 256)).map(Uint8List.fromList)).test(
+      'body bytes are preserved byte-for-byte',
+      (body) {
+        final resp = parseResponse(
+          _buildBhttpResponse(statusCode: 200, body: body),
+          limits: const BhttpResponseLimits(),
+        );
+        expect(resp.body, equals(body));
+      },
+    );
+
+    Glados(
+      any.list<(String, String)>(
+        any.combine2(
+          any.nonEmptyLowercaseLetters,
+          any.lowercaseLetters,
+          (String n, String v) => (n, v),
+        ),
+      ),
+    ).test(
+      'headers are preserved in insertion order',
+      (headers) {
+        final resp = parseResponse(
+          _buildBhttpResponse(statusCode: 200, headers: headers),
+          limits: const BhttpResponseLimits(),
+        );
+        expect(resp.headers.length, headers.length);
+        for (var i = 0; i < headers.length; i++) {
+          expect(resp.headers[i].$1, headers[i].$1);
+          expect(resp.headers[i].$2, headers[i].$2);
+        }
+      },
+    );
+
+    Glados(any.intInRange(1, 6)).test(
+      'arbitrary count of 1xx responses are skipped before final status',
+      (count1xx) {
+        final buf = BytesBuilder();
+        buf.add(encodeVarint(1)); // framing
+        for (var k = 0; k < count1xx; k++) {
+          buf.add(encodeVarint(100 + k % 100)); // 1xx status
+          buf.add(encodeVarint(0)); // empty informational header section
+        }
+        buf.add(encodeVarint(200));
+        buf.add(encodeVarint(0)); // empty headers
+        buf.add(encodeVarint(0)); // empty body
+        final resp = parseResponse(buf.toBytes(), limits: const BhttpResponseLimits());
+        expect(resp.statusCode, 200);
+      },
+    );
+
+    // RFC 9292 §3.3: a 1xx informational response must be followed by a final
+    // response. A buffer that ends after 1xx — with no final status — is truncated
+    // and must throw OhttpFormatException.
+    Glados(any.intInRange(100, 200)).test(
+      'throws OhttpFormatException when buffer ends after 1xx with no final status',
+      (status1xx) {
+        final buf = BytesBuilder();
+        buf.add(encodeVarint(1)); // framing
+        buf.add(encodeVarint(status1xx)); // 1xx status
+        buf.add(encodeVarint(0)); // empty informational header section
+        // intentionally no final status — buffer is truncated here
+        expect(
+          () => parseResponse(buf.toBytes(), limits: const BhttpResponseLimits()),
+          throwsA(isA<OhttpFormatException>()),
+        );
+      },
+    );
+
+    // For limit tests, we test both "at limit" (passes) and "over limit" (throws)
+    // as properties over a range of body lengths.
+    Glados(any.intInRange(0, 1000)).test(
+      'body never silently truncated when within limit',
+      (bodyLen) {
+        final body = Uint8List(bodyLen);
+        final resp = parseResponse(
+          _buildBhttpResponse(statusCode: 200, body: body),
+          limits: BhttpResponseLimits(maxBodyBytes: bodyLen),
+        );
+        expect(resp.body.length, bodyLen);
+      },
+    );
+
+    Glados(any.intInRange(1, 1000)).test(
+      'body exceeding limit throws OhttpSizeLimitException',
+      (bodyLen) {
+        final body = Uint8List(bodyLen);
+        expect(
+          () => parseResponse(
+            _buildBhttpResponse(statusCode: 200, body: body),
+            limits: BhttpResponseLimits(maxBodyBytes: bodyLen - 1),
+          ),
+          throwsA(isA<OhttpSizeLimitException>()),
+        );
+      },
+    );
+
+    // Header section = varint(nameLen=1) + "n" + varint(valueLen) + value
+    //                = 1 + 1 + 1 + valueLen = 3 + valueLen  (for valueLen ∈ [0, 62])
+    // Range [3, 65]: valueLen = limit - 3 ∈ [0, 62], so valueLen + 1 ≤ 63 — always
+    // fits in a 1-byte varint.  Stopping at 66 would give valueLen = 63, making
+    // valueLen + 1 = 64 which encodes as 2 bytes and breaks the "one byte over" invariant.
+    Glados(any.intInRange(3, 66)).test(
+      'header section at limit passes, one byte over throws',
+      (limit) {
+        final name = utf8.encode('n');
+        final valueLen = limit - 3;
+        final exactSection = _buildHeaderSection(name, utf8.encode('v' * valueLen));
+        final buf1 = BytesBuilder()
+          ..add(encodeVarint(1))
+          ..add(encodeVarint(200))
+          ..add(encodeVarint(exactSection.length))
+          ..add(exactSection)
+          ..add(encodeVarint(0));
+        expect(
+          parseResponse(buf1.toBytes(), limits: BhttpResponseLimits(maxHeaderBytes: limit)).statusCode,
+          200,
+        );
+
+        final overSection = _buildHeaderSection(name, utf8.encode('v' * (valueLen + 1)));
+        final buf2 = BytesBuilder()
+          ..add(encodeVarint(1))
+          ..add(encodeVarint(200))
+          ..add(encodeVarint(overSection.length))
+          ..add(overSection)
+          ..add(encodeVarint(0));
+        expect(
+          () => parseResponse(buf2.toBytes(), limits: BhttpResponseLimits(maxHeaderBytes: limit)),
+          throwsA(isA<OhttpSizeLimitException>()),
+        );
+      },
+    );
   });
 
   group('serialize/parse roundtrip', () {
-    test('request serialize then manually build matching response', () {
-      // Serialize a request
-      final reqData = serializeRequest(
-        method: 'GET',
-        scheme: 'https',
-        authority: 'example.com',
-        path: '/get',
-        headers: [('accept', 'application/json')],
-        body: Uint8List(0),
-      );
-
-      // Just verify it's non-empty and starts with framing=0
-      expect(reqData.isNotEmpty, true);
-      expect(reqData[0], 0x00);
-    });
-
     test('response with 404 status', () {
       final buf = BytesBuilder();
       buf.add(encodeVarint(1));
@@ -374,35 +714,35 @@ void main() {
   });
 
   group('parseResponse validation', () {
-    test('throws OhttpFormatException on status below 100 and above 599', () {
-      // Status code 50 (below 100)
-      final buf1 = BytesBuilder();
-      buf1.add(encodeVarint(1));
-      buf1.add(encodeVarint(50));
-      buf1.add(encodeVarint(0));
-      buf1.add(encodeVarint(0));
-      expect(
-        () => parseResponse(
-          buf1.toBytes(),
-          limits: const BhttpResponseLimits(),
-        ),
-        throwsA(isA<OhttpFormatException>()),
-      );
+    Glados(any.intInRange(0, 100)).test(
+      'throws OhttpFormatException for all status codes below 100',
+      (code) {
+        final buf = BytesBuilder()
+          ..add(encodeVarint(1))
+          ..add(encodeVarint(code))
+          ..add(encodeVarint(0))
+          ..add(encodeVarint(0));
+        expect(
+          () => parseResponse(buf.toBytes(), limits: const BhttpResponseLimits()),
+          throwsA(isA<OhttpFormatException>()),
+        );
+      },
+    );
 
-      // Status code 700 (above 599)
-      final buf2 = BytesBuilder();
-      buf2.add(encodeVarint(1));
-      buf2.add(encodeVarint(700));
-      buf2.add(encodeVarint(0));
-      buf2.add(encodeVarint(0));
-      expect(
-        () => parseResponse(
-          buf2.toBytes(),
-          limits: const BhttpResponseLimits(),
-        ),
-        throwsA(isA<OhttpFormatException>()),
-      );
-    });
+    Glados(any.intInRange(600, 1000)).test(
+      'throws OhttpFormatException for all status codes above 599',
+      (code) {
+        final buf = BytesBuilder()
+          ..add(encodeVarint(1))
+          ..add(encodeVarint(code))
+          ..add(encodeVarint(0))
+          ..add(encodeVarint(0));
+        expect(
+          () => parseResponse(buf.toBytes(), limits: const BhttpResponseLimits()),
+          throwsA(isA<OhttpFormatException>()),
+        );
+      },
+    );
 
     test('accepts boundary status codes 100 and 599', () {
       // Status code 100 (informational, followed by final 200)
@@ -577,4 +917,41 @@ void main() {
       );
     });
   });
+}
+
+Uint8List _buildBhttpResponse({
+  required int statusCode,
+  Uint8List? body,
+  List<(String, String)> headers = const <(String, String)>[],
+}) {
+  final buf = BytesBuilder();
+  buf.add(encodeVarint(1)); // framing = known-length response
+  buf.add(encodeVarint(statusCode));
+  final headerBuf = BytesBuilder();
+  for (final (name, value) in headers) {
+    final n = utf8.encode(name);
+    headerBuf.add(encodeVarint(n.length));
+    headerBuf.add(n);
+    final v = utf8.encode(value);
+    headerBuf.add(encodeVarint(v.length));
+    headerBuf.add(v);
+  }
+  final headerBytes = headerBuf.toBytes();
+  buf.add(encodeVarint(headerBytes.length));
+  buf.add(headerBytes);
+  final b = body ?? Uint8List(0);
+  buf.add(encodeVarint(b.length));
+  buf.add(b);
+
+  return buf.toBytes();
+}
+
+Uint8List _buildHeaderSection(List<int> nameBytes, List<int> valueBytes) {
+  final buf = BytesBuilder();
+  buf.add(encodeVarint(nameBytes.length));
+  buf.add(nameBytes);
+  buf.add(encodeVarint(valueBytes.length));
+  buf.add(valueBytes);
+
+  return buf.toBytes();
 }
