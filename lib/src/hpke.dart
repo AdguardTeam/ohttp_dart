@@ -141,6 +141,14 @@ class HpkeSender {
     Uint8List recipientPkBytes, {
     SimpleKeyPairData? testKeyPair,
   }) async {
+    // RFC 9180 §7.1 Table 2: DHKEM(X25519, HKDF-SHA256) defines Npk = 32 bytes.
+    if (recipientPkBytes.length != CipherSuite.kemPublicKeyLength) {
+      throw OhttpCryptoException(
+        'HPKE KEM encap: recipient public key must be '
+        '${CipherSuite.kemPublicKeyLength} bytes, got ${recipientPkBytes.length}',
+        stackTrace: StackTrace.current,
+      );
+    }
     try {
       // Ephemeral keypair
       final KeyPair ephKp;
@@ -400,7 +408,7 @@ class HpkeSenderContext {
     // RFC 9180 §5.3: L has a maximum value of 255*Nh.
     if (length <= 0 || length > 255 * CipherSuite.kdfHashLength) {
       throw OhttpCryptoException(
-        'HPKE export lebytesngth out of range: $length (must be 1..${255 * CipherSuite.kdfHashLength})',
+        'HPKE export length out of range: $length (must be 1..${255 * CipherSuite.kdfHashLength})',
         stackTrace: StackTrace.current,
       );
     }
