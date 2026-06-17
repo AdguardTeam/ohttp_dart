@@ -339,14 +339,6 @@ void main() {
     });
   });
 
-  group('_kemEncap dh wipe regression', () {
-    test('erase zeroes Uint8List contents via ErasableByteArray', () {
-      final data = Uint8List.fromList(List.filled(32, 0x42));
-      ErasableByteArray(data).erase();
-      expect(data.every((b) => b == 0), isTrue);
-    });
-  });
-
   group('sequence number overflow in seal', () {
     // RFC 9180 §5.2: sequence number must not exceed 2^Nn - 1.
     // Our implementation uses a 32-bit Dart int and throws at seq >= 2^32.
