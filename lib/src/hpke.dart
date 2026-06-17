@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 
 import 'cipher_suite.dart';
+import 'erasable_byte_array.dart';
 import 'exceptions.dart';
 
 /// HPKE Base Mode Sender (RFC 9180) for the cipher suite:
@@ -46,17 +47,21 @@ class HpkeSender {
       recipientPublicKey,
       testKeyPair: testKeyPair,
     );
-    final (key, baseNonce, exporterSecret) = await _keySchedule(
-      sharedSecret,
-      info,
-    );
+    try {
+      final (key, baseNonce, exporterSecret) = await _keySchedule(
+        sharedSecret.bytes,
+        info,
+      );
 
-    return HpkeSenderContext._(
-      enc: enc,
-      key: key,
-      baseNonce: baseNonce,
-      exporterSecret: exporterSecret,
-    );
+      return HpkeSenderContext._(
+        enc: enc,
+        key: ErasableByteArray(key),
+        baseNonce: ErasableByteArray(baseNonce),
+        exporterSecret: ErasableByteArray(exporterSecret),
+      );
+    } finally {
+      sharedSecret.erase();
+    }
   }
 
   // -- Raw HKDF operations (RFC 5869) --
@@ -93,19 +98,31 @@ class HpkeSender {
     try {
       const hashLen = CipherSuite.kdfHashLength;
       final n = (length + hashLen - 1) ~/ hashLen;
-      var t = Uint8List(0);
+      var t = ErasableByteArray(Uint8List(0));
       final okm = BytesBuilder();
-      for (var i = 1; i <= n; i++) {
-        final input = Uint8List.fromList([...t, ...info, i]);
-        final mac = await _hmac.calculateMac(
-          input,
-          secretKey: secretKey,
-        );
-        t = Uint8List.fromList(mac.bytes);
-        okm.add(t);
+      try {
+        for (var i = 1; i <= n; i++) {
+          final input = Uint8List.fromList([...t.bytes, ...info, i]);
+          final mac = await _hmac.calculateMac(
+            input,
+            secretKey: secretKey,
+          );
+          t.erase();
+          t = ErasableByteArray(Uint8List.fromList(mac.bytes));
+          okm.add(t.bytes);
+        }
+        final okmBytes = Uint8List.fromList(okm.toBytes());
+        try {
+          return Uint8List.sublistView(okmBytes, 0, length);
+        } finally {
+          // Wipe the bytes beyond the returned sublist view (they share the same buffer).
+          for (var i = length; i < okmBytes.length; i++) {
+            okmBytes[i] = 0;
+          }
+        }
+      } finally {
+        t.erase();
       }
-
-      return Uint8List.sublistView(Uint8List.fromList(okm.toBytes()), 0, length);
     } on Exception catch (e, st) {
       throw OhttpCryptoException(
         'HKDF-Expand failed',
@@ -119,7 +136,7 @@ class HpkeSender {
 
   // -- KEM Encap (RFC 9180 §4.1) --
 
-  static Future<(Uint8List sharedSecret, Uint8List enc)> _kemEncap(
+  static Future<(ErasableByteArray sharedSecret, Uint8List enc)> _kemEncap(
     Uint8List recipientPkBytes, {
     SimpleKeyPairData? testKeyPair,
   }) async {
@@ -146,15 +163,23 @@ class HpkeSender {
         keyPair: ephKp,
         remotePublicKey: recipientPk,
       );
-      final dh = Uint8List.fromList(await dhResult.extractBytes());
+      final dh = ErasableByteArray(
+        Uint8List.fromList(await dhResult.extractBytes()),
+      );
 
       // kem_context = enc || pkR
       final kemContext = Uint8List.fromList([...enc, ...recipientPkBytes]);
 
       // shared_secret = ExtractAndExpand(dh, kem_context)
-      final sharedSecret = await _extractAndExpand(dh, kemContext);
+      try {
+        final sharedSecret = ErasableByteArray(
+          await _extractAndExpand(dh.bytes, kemContext),
+        );
 
-      return (sharedSecret, enc);
+        return (sharedSecret, enc);
+      } finally {
+        dh.erase();
+      }
     } on OhttpCryptoException {
       rethrow;
     } on Exception catch (e, st) {
@@ -170,20 +195,26 @@ class HpkeSender {
     Uint8List dh,
     Uint8List kemContext,
   ) async {
-    final prk = await _labeledExtract(
-      _kemSuiteId,
-      Uint8List(0),
-      utf8.encode('eae_prk'),
-      dh,
+    final prk = ErasableByteArray(
+      await _labeledExtract(
+        _kemSuiteId,
+        Uint8List(0),
+        utf8.encode('eae_prk'),
+        dh,
+      ),
     );
 
-    return _labeledExpand(
-      _kemSuiteId,
-      prk,
-      utf8.encode('shared_secret'),
-      kemContext,
-      CipherSuite.kemSharedSecretLength,
-    );
+    try {
+      return await _labeledExpand(
+        _kemSuiteId,
+        prk.bytes,
+        utf8.encode('shared_secret'),
+        kemContext,
+        CipherSuite.kemSharedSecretLength,
+      );
+    } finally {
+      prk.erase();
+    }
   }
 
   // -- Key Schedule (RFC 9180 §5.1, base mode) --
@@ -210,38 +241,44 @@ class HpkeSender {
     final ksContext = Uint8List.fromList([0x00, ...pskIdHash, ...infoHash]);
 
     // secret = LabeledExtract(shared_secret, "secret", psk="")
-    final secret = await _labeledExtract(
-      _hpkeSuiteId,
-      sharedSecret,
-      utf8.encode('secret'),
-      Uint8List(0),
+    final secret = ErasableByteArray(
+      await _labeledExtract(
+        _hpkeSuiteId,
+        sharedSecret,
+        utf8.encode('secret'),
+        Uint8List(0),
+      ),
     );
 
-    final key = await _labeledExpand(
-      _hpkeSuiteId,
-      secret,
-      utf8.encode('key'),
-      ksContext,
-      CipherSuite.aeadKeyLength,
-    );
+    try {
+      final key = await _labeledExpand(
+        _hpkeSuiteId,
+        secret.bytes,
+        utf8.encode('key'),
+        ksContext,
+        CipherSuite.aeadKeyLength,
+      );
 
-    final baseNonce = await _labeledExpand(
-      _hpkeSuiteId,
-      secret,
-      utf8.encode('base_nonce'),
-      ksContext,
-      CipherSuite.aeadNonceLength,
-    );
+      final baseNonce = await _labeledExpand(
+        _hpkeSuiteId,
+        secret.bytes,
+        utf8.encode('base_nonce'),
+        ksContext,
+        CipherSuite.aeadNonceLength,
+      );
 
-    final exporterSecret = await _labeledExpand(
-      _hpkeSuiteId,
-      secret,
-      utf8.encode('exp'),
-      ksContext,
-      CipherSuite.kdfHashLength,
-    );
+      final exporterSecret = await _labeledExpand(
+        _hpkeSuiteId,
+        secret.bytes,
+        utf8.encode('exp'),
+        ksContext,
+        CipherSuite.kdfHashLength,
+      );
 
-    return (key, baseNonce, exporterSecret);
+      return (key, baseNonce, exporterSecret);
+    } finally {
+      secret.erase();
+    }
   }
 
   // -- Labeled HKDF operations (RFC 9180 §4) --
@@ -253,15 +290,20 @@ class HpkeSender {
     Uint8List salt,
     List<int> label,
     Uint8List ikm,
-  ) {
-    final labeledIkm = Uint8List.fromList([
-      ...utf8.encode('HPKE-v1'),
-      ...suiteId,
-      ...label,
-      ...ikm,
-    ]);
-
-    return hkdfExtract(salt, labeledIkm);
+  ) async {
+    final labeledIkm = ErasableByteArray(
+      Uint8List.fromList([
+        ...utf8.encode('HPKE-v1'),
+        ...suiteId,
+        ...label,
+        ...ikm,
+      ]),
+    );
+    try {
+      return await hkdfExtract(salt, labeledIkm.bytes);
+    } finally {
+      labeledIkm.erase();
+    }
   }
 
   /// LabeledExpand(prk, label, info, L) =
@@ -292,13 +334,13 @@ class HpkeSenderContext {
   final Uint8List enc;
 
   /// AEAD encryption key derived by HPKE key schedule.
-  final Uint8List key;
+  final ErasableByteArray key;
 
   /// AEAD base nonce derived by HPKE key schedule.
-  final Uint8List baseNonce;
+  final ErasableByteArray baseNonce;
 
   /// Exporter secret for further key derivation (RFC 9180 §5.1).
-  final Uint8List exporterSecret;
+  final ErasableByteArray exporterSecret;
 
   HpkeSenderContext._({
     required this.enc,
@@ -314,7 +356,7 @@ class HpkeSenderContext {
   /// Each call increments the internal sequence counter (RFC 9180 §5.2).
   Future<Uint8List> seal(Uint8List aad, Uint8List plaintext) async {
     final nonce = _computeNonce();
-    final secretKey = SecretKeyData(key);
+    final secretKey = SecretKeyData(key.bytes);
     try {
       final secretBox = await HpkeSender._aesGcm.encrypt(
         plaintext,
@@ -341,11 +383,20 @@ class HpkeSenderContext {
   /// Export a secret from this HPKE context (RFC 9180 §5.3).
   Future<Uint8List> export(Uint8List exporterContext, int length) => HpkeSender._labeledExpand(
     HpkeSender._hpkeSuiteId,
-    exporterSecret,
+    exporterSecret.bytes,
     utf8.encode('sec'),
     exporterContext,
     length,
   );
+
+  /// Zeroes out sensitive cryptographic data (key, base_nonce, exporter secret).
+  /// The `enc` (public key) is NOT zeroed — it is an ephemeral public key
+  /// transmitted in the clear in the encapsulated request.
+  void dispose() {
+    key.erase();
+    baseNonce.erase();
+    exporterSecret.erase();
+  }
 
   /// Computes nonce = base_nonce XOR I2OSP(seq, Nn) and increments seq.
   /// Matches BouncyCastle AEAD.computeNonce() (RFC 9180 §5.2).
@@ -353,7 +404,7 @@ class HpkeSenderContext {
     if (_seq >= (1 << 32)) {
       throw const OhttpCryptoException('HPKE message limit reached');
     }
-    final nonce = Uint8List.fromList(baseNonce);
+    final nonce = Uint8List.fromList(baseNonce.bytes);
     // XOR seq (as big-endian) into the last bytes of nonce
     final s = _seq++;
     nonce[nonce.length - 1] ^= s & 0xFF;

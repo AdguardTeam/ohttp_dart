@@ -276,8 +276,8 @@ void main() {
       expect(result.encRequest[5], 0x00);
       expect(result.encRequest[6], 0x01);
 
-      expect(result.enc.length, CipherSuite.kemPublicKeyLength);
-      expect(result.exportedSecret.length, 16);
+      expect(result.enc.bytes.length, CipherSuite.kemPublicKeyLength);
+      expect(result.exportedSecret.bytes.length, 16);
 
       // Ciphertext = plaintext(5) + AES-GCM tag(16) = 21 bytes
       final ctLen = result.encRequest.length - 7 - CipherSuite.kemPublicKeyLength;
@@ -329,6 +329,31 @@ void main() {
         ),
         throwsA(isA<OhttpCryptoException>()),
       );
+    });
+  });
+
+  group('OhttpEncapsulateResult.dispose', () {
+    test('zeroes enc and exportedSecret', () {
+      final result = OhttpEncapsulateResult(
+        encRequest: Uint8List.fromList([1, 2, 3, 4]),
+        enc: ErasableByteArray(Uint8List.fromList([5, 6, 7, 8])),
+        exportedSecret: ErasableByteArray(Uint8List.fromList([9, 10, 11, 12])),
+      );
+
+      // Verify data is non-zero before dispose
+      expect(result.enc.bytes.any((b) => b != 0), isTrue);
+      expect(result.exportedSecret.bytes.any((b) => b != 0), isTrue);
+      expect(result.encRequest.any((b) => b != 0), isTrue);
+
+      result.dispose();
+
+      // enc and exportedSecret must be erased — accessing bytes throws StateError
+      expect(() => result.enc.bytes, throwsStateError);
+      expect(() => result.exportedSecret.bytes, throwsStateError);
+
+      // encRequest must NOT be zeroed (already sent over the network)
+      expect(result.encRequest, Uint8List.fromList([1, 2, 3, 4]));
+      expect(result.encRequest.any((b) => b != 0), isTrue);
     });
   });
 }

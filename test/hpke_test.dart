@@ -97,9 +97,9 @@ void main() {
         );
 
         expect(_toHex(ctx.enc), _toHex(pkEm));
-        expect(_toHex(ctx.key), expectedKey);
-        expect(_toHex(ctx.baseNonce), expectedBaseNonce);
-        expect(_toHex(ctx.exporterSecret), expectedExporterSecret);
+        expect(_toHex(ctx.key.bytes), expectedKey);
+        expect(_toHex(ctx.baseNonce.bytes), expectedBaseNonce);
+        expect(_toHex(ctx.exporterSecret.bytes), expectedExporterSecret);
       },
     );
 
@@ -293,6 +293,49 @@ void main() {
         32,
       );
       expect(okm.length, 32);
+    });
+  });
+
+  group('HpkeSenderContext.dispose', () {
+    test('zeroes key, baseNonce, exporterSecret', () async {
+      final x = X25519();
+      final kp = await x.newKeyPair();
+      final pk = await kp.extractPublicKey();
+
+      final ctx = await HpkeSender.setupBaseS(
+        Uint8List.fromList(pk.bytes),
+        Uint8List.fromList(utf8.encode('test')),
+      );
+
+      // Verify data is non-zero before dispose
+      expect(ctx.key.bytes.any((b) => b != 0), isTrue);
+      expect(ctx.baseNonce.bytes.any((b) => b != 0), isTrue);
+      expect(ctx.exporterSecret.bytes.any((b) => b != 0), isTrue);
+
+      ctx.dispose();
+
+      // Verify fields are erased — accessing bytes throws StateError
+      expect(() => ctx.key.bytes, throwsStateError);
+      expect(() => ctx.baseNonce.bytes, throwsStateError);
+      expect(() => ctx.exporterSecret.bytes, throwsStateError);
+    });
+
+    test('does not zero enc (public key)', () async {
+      final x = X25519();
+      final kp = await x.newKeyPair();
+      final pk = await kp.extractPublicKey();
+
+      final ctx = await HpkeSender.setupBaseS(
+        Uint8List.fromList(pk.bytes),
+        Uint8List.fromList(utf8.encode('test')),
+      );
+
+      final encBefore = Uint8List.fromList(ctx.enc);
+
+      ctx.dispose();
+
+      // enc must remain unchanged
+      expect(ctx.enc, encBefore);
     });
   });
 }

@@ -41,8 +41,10 @@ ohttp_dart/
 │       ├── key_config_cache.dart         # TTL cache with single-flight for key configs
 │       ├── ohttp.dart                    # OHTTP encap/decap + KeyConfig (RFC 9458)
 │       ├── ohttp_data.dart               # Request / response data types
+│       ├── ohttp_observer.dart           # Lifecycle event observer interface
 │       ├── ohttp_session.dart            # OHTTP session orchestrator
 │       ├── ohttp_transport.dart          # Transport abstraction interface
+│       ├── wipe_bytes_extension.dart     # Secure memory wipe utility
 │       └── adapters/
 │           └── http/
 │               ├── http_client_transport.dart   # HttpClientTransport implementation
@@ -51,6 +53,7 @@ ohttp_dart/
 │   ├── bhttp_test.dart
 │   ├── hpke_test.dart
 │   ├── key_config_cache_test.dart
+│   ├── ohttp_observer_test.dart          # Observer lifecycle tests
 │   ├── ohttp_session_test.dart
 │   ├── ohttp_test.dart
 │   ├── test_utils.dart
@@ -162,6 +165,7 @@ Run tests after any change to:
 - BHTTP serialization/parsing (`lib/src/bhttp.dart`)
 - Key config caching (`lib/src/key_config_cache.dart`)
 - Session orchestration (`lib/src/ohttp_session.dart`)
+- Observer events (`lib/src/ohttp_observer.dart`)
 - Transport implementations (`lib/src/adapters/**`)
 
 ### When Agents Must Write or Update Tests
@@ -172,6 +176,7 @@ Write or update tests when:
 - Fixing a bug (write a regression test that reproduces the bug)
 - Changing cryptographic implementations (verify against RFC test vectors)
 - Modifying data serialization formats
+- Adding or changing observer lifecycle events
 
 **Test location** mirrors source: `test/` mirrors `lib/` structure.
 
@@ -201,16 +206,16 @@ Write or update tests when:
 The library uses a sealed exception hierarchy:
 
 - `OhttpException` (sealed base) — base for all library exceptions
-- `OhttpConfigException` — invalid configuration parameters (wrong URL scheme, invalid timeouts)
+- `OhttpConfigException` — invalid configuration parameters (wrong URL scheme, invalid timeouts, negative limits)
 - `OhttpKeyConfigException` — malformed KeyConfig binary data
 - `OhttpUnsupportedSuiteException` — unsupported KEM/KDF/AEAD cipher suite
-- `OhttpGatewayException` — gateway returned non-2xx response (triggers cache invalidation)
-- `OhttpCryptoException` — cryptographic operation failure (AEAD auth, HPKE errors)
+- `OhttpGatewayException` — gateway returned non-2xx response (triggers cache invalidation, includes `statusCode`)
+- `OhttpCryptoException` — cryptographic operation failure (AEAD auth, HPKE errors; includes optional `cause`)
 - `OhttpDecapsulationException` — OHTTP response decapsulation failure
 - `OhttpFormatException` — malformed BHTTP data (wrong framing, invalid status code)
-- `OhttpSizeLimitException` — response/request exceeds configured size limits
-- `OhttpNetworkException` — network-level error (DNS, connection, etc.)
-- `OhttpTimeoutException` — HTTP request exceeded configured timeout
+- `OhttpSizeLimitException` — response/request exceeds configured size limits (includes `limit` and `actualSize`)
+- `OhttpNetworkException` — network-level error (DNS, connection, etc.; includes optional `cause`)
+- `OhttpTimeoutException` — HTTP request exceeded configured timeout (includes `timeout` duration and optional `url`)
 
 ## Security Considerations
 
@@ -254,12 +259,14 @@ After completing implementation, execute this flow **before** declaring the task
 | Protocol logic (OHTTP, HPKE, BHTTP)| `fvm dart test` (full test suite)          |
 | Public API changes                 | Update documentation + run tests           |
 | Cryptographic changes              | Verify against RFC test vectors            |
+| Observer event changes             | Run `ohttp_observer_test.dart`             |
 
 ### Failure Handling
 
 - **Fixable failures**: Fix and rerun the validation.
 - **Cryptographic test failures**: Stop immediately. Do not modify test vectors without expert review.
 - **Spec contradicts RFC**: Report the deviation and request clarification.
+- **Observer test failures**: Observer must never throw; check `notifySafe()` error suppression.
 
 ## AGENTS.md Files Rules
 
@@ -287,6 +294,15 @@ The core library defines `OhttpTransport` interface. Implementations:
 - `OhttpSession` orchestrates the full request/response pipeline
 - Each session owns its transport and cache instances
 - Sessions are NOT thread-safe by default (use external synchronization if needed)
+- Sessions accept an optional `OhttpObserver` for lifecycle event notifications
+
+### Observer Pattern
+
+- `OhttpObserver` provides lifecycle event hooks (abstract class with no-op default methods)
+- Events: `onKeyConfigFetched`, `onKeyConfigCacheHit`, `onPostToGateway`, `onDecapsulationError`, `onGatewayError`, `onCacheInvalidated`, `onEncapsulationError`
+- Observer errors are suppressed via `notifySafe()` — they must not affect the OHTTP pipeline
+- Observer is optional and nullable throughout the API
+- **Security**: observer callbacks must never receive or log cryptographic material (keys, nonces, shared secrets), raw inner request/response bodies, or plaintext headers — only lifecycle signals (success/failure events) and safe metadata (status codes, error types) are permitted
 
 ### Data Types
 
@@ -296,9 +312,13 @@ The core library defines `OhttpTransport` interface. Implementations:
 
 ### Error Handling
 
-- `OhttpGatewayException` — gateway returned error (cache invalidated)
+- `OhttpGatewayException` — gateway returned error (cache invalidated automatically)
 - `OhttpDecapsulationException` — failed to decrypt response
-- `FormatException` — malformed BHTTP data
+- `OhttpFormatException` — malformed BHTTP data (wrong framing, invalid status)
+- `OhttpCryptoException` — AES-GCM / HPKE crypto failure
+- `OhttpSizeLimitException` — response body or encrypted payload too large
+- `OhttpTimeoutException` — request timed out (subclass of `OhttpNetworkException`)
+- All exceptions extend sealed `OhttpException` — catch with one handler
 
 ## References
 

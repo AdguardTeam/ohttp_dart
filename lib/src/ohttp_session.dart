@@ -6,6 +6,7 @@ import 'exceptions.dart';
 import 'key_config_cache.dart';
 import 'ohttp.dart';
 import 'ohttp_data.dart';
+import 'ohttp_observer.dart';
 import 'ohttp_transport.dart';
 
 /// Orchestrates a complete OHTTP request-response round trip.
@@ -26,6 +27,8 @@ import 'ohttp_transport.dart';
 ///
 /// [decryptedResponseLimits] control size validation for BHTTP response
 /// message components (headers, body) after decryption.
+///
+/// [observer] receives lifecycle event notifications
 ///
 class OhttpSession {
   /// Default limit for raw encrypted response from the gateway.
@@ -65,29 +68,34 @@ class OhttpSession {
   final KeyConfigCache _cache;
   final int _maxEncryptedResponseBytes;
   final BhttpResponseLimits _decryptedResponseLimits;
+  final OhttpObserver? _observer;
 
   /// The [cache] must be backed by the same [transport] instance so that
   /// cache invalidation and gateway requests target the same gateway.
   OhttpSession({
     required OhttpTransport transport,
     required KeyConfigCache cache,
+    OhttpObserver? observer,
     int maxEncryptedResponseBytes = _defaultMaxEncryptedResponseBytes,
     BhttpResponseLimits decryptedResponseLimits = const BhttpResponseLimits(),
   }) : _transport = transport,
        _cache = cache,
        _maxEncryptedResponseBytes = _validateMaxEncryptedResponseBytes(maxEncryptedResponseBytes),
-       _decryptedResponseLimits = _validateDecryptedResponseLimits(decryptedResponseLimits);
+       _decryptedResponseLimits = _validateDecryptedResponseLimits(decryptedResponseLimits),
+       _observer = observer;
 
   /// Shortcut that creates a [KeyConfigCache] over [transport] with the
   /// default TTL.
   OhttpSession.withTransport({
     required OhttpTransport transport,
+    OhttpObserver? observer,
     int maxEncryptedResponseBytes = _defaultMaxEncryptedResponseBytes,
     BhttpResponseLimits decryptedResponseLimits = const BhttpResponseLimits(),
   }) : _transport = transport,
-       _cache = KeyConfigCache(transport: transport),
+       _cache = KeyConfigCache(transport: transport, observer: observer),
        _maxEncryptedResponseBytes = _validateMaxEncryptedResponseBytes(maxEncryptedResponseBytes),
-       _decryptedResponseLimits = _validateDecryptedResponseLimits(decryptedResponseLimits);
+       _decryptedResponseLimits = _validateDecryptedResponseLimits(decryptedResponseLimits),
+       _observer = observer;
 
   /// Executes a full OHTTP round trip for [request].
   Future<OhttpResponseData> send(OhttpRequestData request) async {
@@ -102,39 +110,57 @@ class OhttpSession {
       body: request.body,
     );
 
-    final encapsulated = await ohttpEncapsulate(config, binaryRequest);
-
-    final Uint8List encResponse;
+    OhttpEncapsulateResult encapsulated;
     try {
-      encResponse = await _transport.postToGateway(encapsulated.encRequest);
-    } on OhttpGatewayException {
-      _cache.invalidate();
+      encapsulated = await ohttpEncapsulate(config, binaryRequest);
+    } on OhttpException catch (e) {
+      _observer?.notifySafe((o) => o.onEncapsulationError(e.runtimeType));
       rethrow;
     }
 
-    if (encResponse.length > _maxEncryptedResponseBytes) {
-      throw OhttpSizeLimitException(
-        'Gateway response size exceeds limit',
-        limit: _maxEncryptedResponseBytes,
-        actualSize: encResponse.length,
+    try {
+      final Uint8List encResponse;
+      try {
+        _observer?.notifySafe((o) => o.onPostToGateway());
+        encResponse = await _transport.postToGateway(encapsulated.encRequest);
+      } on OhttpGatewayException catch (e) {
+        _observer?.notifySafe((o) => o.onGatewayError(e.statusCode));
+        _cache.invalidate();
+        rethrow;
+      }
+
+      if (encResponse.length > _maxEncryptedResponseBytes) {
+        throw OhttpSizeLimitException(
+          'Gateway response size exceeds limit',
+          limit: _maxEncryptedResponseBytes,
+          actualSize: encResponse.length,
+        );
+      }
+
+      final Uint8List binaryResponse;
+      try {
+        binaryResponse = await ohttpDecapsulate(
+          encapsulated.enc.bytes,
+          encapsulated.exportedSecret.bytes,
+          encResponse,
+        );
+      } on OhttpException catch (e) {
+        _observer?.notifySafe((o) => o.onDecapsulationError(e.runtimeType));
+        rethrow;
+      }
+
+      final parsed = bhttp.parseResponse(
+        binaryResponse,
+        limits: _decryptedResponseLimits,
       );
+
+      return OhttpResponseData(
+        statusCode: parsed.statusCode,
+        headers: parsed.headers,
+        body: parsed.body,
+      );
+    } finally {
+      encapsulated.dispose();
     }
-
-    final binaryResponse = await ohttpDecapsulate(
-      encapsulated.enc,
-      encapsulated.exportedSecret,
-      encResponse,
-    );
-
-    final parsed = bhttp.parseResponse(
-      binaryResponse,
-      limits: _decryptedResponseLimits,
-    );
-
-    return OhttpResponseData(
-      statusCode: parsed.statusCode,
-      headers: parsed.headers,
-      body: parsed.body,
-    );
   }
 }

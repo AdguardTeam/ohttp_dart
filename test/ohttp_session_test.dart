@@ -8,12 +8,12 @@ import 'test_utils.dart';
 /// Fake transport that records calls and can be instructed to succeed or fail.
 class _FakeTransport implements OhttpTransport {
   final Uint8List config;
-  Uint8List? responseBody;
-
   _FakeTransport([Uint8List? config]) : config = config ?? validKeyConfig();
 
   int fetchCount = 0;
+
   int postCount = 0;
+  Uint8List? responseBody;
 
   Uint8List? lastPostBody;
 
@@ -335,6 +335,35 @@ void main() {
         ),
         throwsA(isA<OhttpConfigException>()),
       );
+    });
+  });
+
+  group('OhttpResponseData header normalization', () {
+    test('lowercases header names', () {
+      final response = OhttpResponseData(
+        statusCode: 200,
+        headers: [
+          ('Content-Type', 'application/json'),
+          ('X-Custom-Header', 'value'),
+          ('UPPERCASE', 'test'),
+        ],
+        body: Uint8List(0),
+      );
+
+      expect(response.headers[0].$1, 'content-type');
+      expect(response.headers[1].$1, 'x-custom-header');
+      expect(response.headers[2].$1, 'uppercase');
+    });
+
+    test('preserves header values unchanged', () {
+      final response = OhttpResponseData(
+        statusCode: 200,
+        headers: [('Content-Type', 'Application/JSON')],
+        body: Uint8List(0),
+      );
+
+      expect(response.headers[0].$1, 'content-type');
+      expect(response.headers[0].$2, 'Application/JSON');
     });
   });
 }

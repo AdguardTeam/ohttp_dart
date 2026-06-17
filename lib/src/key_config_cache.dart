@@ -1,4 +1,5 @@
 import 'ohttp.dart';
+import 'ohttp_observer.dart';
 import 'ohttp_transport.dart';
 
 /// A time-to-live cache for the gateway's parsed [OhttpKeyConfig].
@@ -15,18 +16,22 @@ class KeyConfigCache {
   final OhttpTransport _transport;
   final Duration _ttl;
   final DateTime Function() _now;
+  final OhttpObserver? _observer;
 
   /// Creates a TTL cache backed by [transport].
   ///
   /// [now] overrides the clock (defaults to [DateTime.now]).
   /// [ttl] sets cache lifetime (defaults to 1 hour).
+  /// [observer] receives notifications on fetch and cache-hit events.
   KeyConfigCache({
     required OhttpTransport transport,
     DateTime Function()? now,
+    OhttpObserver? observer,
     Duration ttl = _defaultTtl,
   }) : _transport = transport,
        _ttl = ttl,
-       _now = now ?? (() => DateTime.now());
+       _now = now ?? (() => DateTime.now()),
+       _observer = observer;
 
   DateTime _expiresAt = DateTime.fromMillisecondsSinceEpoch(0);
   OhttpKeyConfig? _cached;
@@ -38,6 +43,8 @@ class KeyConfigCache {
   /// issued; concurrent callers share a single in-flight fetch.
   Future<OhttpKeyConfig> get() async {
     if (_cached != null && _now().isBefore(_expiresAt)) {
+      _observer?.notifySafe((o) => o.onKeyConfigCacheHit());
+
       return _cached!;
     }
 
@@ -51,6 +58,7 @@ class KeyConfigCache {
       final config = await fetch;
       _cached = config;
       _expiresAt = _now().add(_ttl);
+      _observer?.notifySafe((o) => o.onKeyConfigFetched());
 
       return config;
     } finally {
@@ -60,7 +68,10 @@ class KeyConfigCache {
 
   /// Evicts the cached configuration so that the next [get] performs a
   /// fresh fetch unconditionally.
-  void invalidate() => _cached = null;
+  void invalidate() {
+    _cached = null;
+    _observer?.notifySafe((o) => o.onCacheInvalidated());
+  }
 
   Future<OhttpKeyConfig> _fetch() async {
     final bytes = await _transport.fetchKeyConfig();

@@ -93,9 +93,11 @@ class OhttpResponseData {
   final Uint8List body;
 
   /// Creates HTTP response data.
+  ///
+  /// Header names are normalized to lowercase
   OhttpResponseData({
     required this.body,
     required this.statusCode,
-    this.headers = const [],
-  });
+    List<(String, String)> headers = const [],
+  }) : headers = headers.map((h) => (h.$1.toLowerCase(), h.$2)).toList();
 }

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 
 import 'cipher_suite.dart';
+import 'erasable_byte_array.dart';
 import 'exceptions.dart';
 import 'hpke.dart';
 
@@ -174,10 +175,10 @@ class OhttpEncapsulateResult {
   final Uint8List encRequest;
 
   /// The 32-byte HPKE enc value (needed for response decapsulation).
-  final Uint8List enc;
+  final ErasableByteArray enc;
 
   /// The exported secret (needed for response decapsulation).
-  final Uint8List exportedSecret;
+  final ErasableByteArray exportedSecret;
 
   /// Creates an OHTTP encapsulation result.
   OhttpEncapsulateResult({
@@ -185,6 +186,14 @@ class OhttpEncapsulateResult {
     required this.enc,
     required this.exportedSecret,
   });
+
+  /// Zeroes out sensitive data (`enc` and `exportedSecret`) after decapsulation.
+  /// `encRequest` is NOT zeroed — it has already been sent over the network.
+  /// Call after the response has been successfully decapsulated.
+  void dispose() {
+    enc.erase();
+    exportedSecret.erase();
+  }
 }
 
 // OHTTP response nonce length = max(Nn, Nk) per RFC 9458 §4.6.2.
@@ -214,25 +223,29 @@ Future<OhttpEncapsulateResult> ohttpEncapsulate(
     testKeyPair: testKeyPair,
   );
 
-  // Seal with empty AAD (per reference Go implementation, not RFC header)
-  final ct = await ctx.seal(Uint8List(0), binaryRequest);
+  try {
+    // Seal with empty AAD (per reference Go implementation, not RFC header)
+    final ct = await ctx.seal(Uint8List(0), binaryRequest);
 
-  // Export secret for response decryption
-  final responseContext = utf8.encode('message/bhttp response');
-  final exportedSecret = await ctx.export(
-    Uint8List.fromList(responseContext),
-    _responseNonceLen,
-  );
+    // Export secret for response decryption
+    final responseContext = utf8.encode('message/bhttp response');
+    final exportedSecret = await ctx.export(
+      Uint8List.fromList(responseContext),
+      _responseNonceLen,
+    );
 
-  // Assemble: header(7) || enc(32) || ciphertext
-  final header = _buildRequestHeader(config);
-  final encRequest = Uint8List.fromList([...header, ...ctx.enc, ...ct]);
+    // Assemble: header(7) || enc(32) || ciphertext
+    final header = _buildRequestHeader(config);
+    final encRequest = Uint8List.fromList([...header, ...ctx.enc, ...ct]);
 
-  return OhttpEncapsulateResult(
-    encRequest: encRequest,
-    enc: ctx.enc,
-    exportedSecret: exportedSecret,
-  );
+    return OhttpEncapsulateResult(
+      encRequest: encRequest,
+      enc: ErasableByteArray(ctx.enc),
+      exportedSecret: ErasableByteArray(exportedSecret),
+    );
+  } finally {
+    ctx.dispose();
+  }
 }
 
 /// Decapsulate an OHTTP response (RFC 9458 §4.6.2).
@@ -260,54 +273,70 @@ Future<Uint8List> ohttpDecapsulate(
   final salt = Uint8List.fromList([...enc, ...responseNonce]);
 
   // prk = HKDF-Extract(salt, secret) — plain HKDF, not labeled
-  final prk = await HpkeSender.hkdfExtract(salt, exportedSecret);
+  final prk = ErasableByteArray(await HpkeSender.hkdfExtract(salt, exportedSecret));
 
-  // key = HKDF-Expand(prk, "key", Nk)
-  final aeadKey = await HpkeSender.hkdfExpand(
-    prk,
-    Uint8List.fromList(utf8.encode('key')),
-    CipherSuite.aeadKeyLength,
-  );
-
-  // nonce = HKDF-Expand(prk, "nonce", Nn)
-  final aeadNonce = await HpkeSender.hkdfExpand(
-    prk,
-    Uint8List.fromList(utf8.encode('nonce')),
-    CipherSuite.aeadNonceLength,
-  );
-
-  // AES-128-GCM decrypt with empty AAD
-  const tagLen = CipherSuite.aeadTagLength;
-  if (ciphertext.length < tagLen) {
-    throw OhttpDecapsulationException(
-      'Ciphertext too short for AES-GCM tag',
-      stackTrace: StackTrace.current,
-    );
-  }
-  final ct = ciphertext.sublist(0, ciphertext.length - tagLen);
-  final tag = ciphertext.sublist(ciphertext.length - tagLen);
-
-  final aesGcm = AesGcm.with128bits();
-  final secretBox = SecretBox(ct, nonce: aeadNonce, mac: Mac(tag));
-  final secretKey = SecretKeyData(aeadKey);
-  final List<int> plaintext;
+  final ErasableByteArray aeadKey;
+  final ErasableByteArray aeadNonce;
   try {
-    plaintext = await aesGcm.decrypt(
-      secretBox,
-      secretKey: secretKey,
-      aad: [],
+    // key = HKDF-Expand(prk, "key", Nk)
+    aeadKey = ErasableByteArray(
+      await HpkeSender.hkdfExpand(
+        prk.bytes,
+        Uint8List.fromList(utf8.encode('key')),
+        CipherSuite.aeadKeyLength,
+      ),
     );
-  } on Exception catch (e, st) {
-    throw OhttpCryptoException(
-      'Failed to decrypt OHTTP response',
-      cause: e,
-      stackTrace: st,
+
+    // nonce = HKDF-Expand(prk, "nonce", Nn)
+    aeadNonce = ErasableByteArray(
+      await HpkeSender.hkdfExpand(
+        prk.bytes,
+        Uint8List.fromList(utf8.encode('nonce')),
+        CipherSuite.aeadNonceLength,
+      ),
     );
   } finally {
-    secretKey.destroy();
+    // Zero out intermediate PRK after key derivation
+    prk.erase();
   }
 
-  return Uint8List.fromList(plaintext);
+  try {
+    // AES-128-GCM decrypt with empty AAD
+    const tagLen = CipherSuite.aeadTagLength;
+    if (ciphertext.length < tagLen) {
+      throw OhttpDecapsulationException(
+        'Ciphertext too short for AES-GCM tag',
+        stackTrace: StackTrace.current,
+      );
+    }
+    final ct = ciphertext.sublist(0, ciphertext.length - tagLen);
+    final tag = ciphertext.sublist(ciphertext.length - tagLen);
+
+    final aesGcm = AesGcm.with128bits();
+    final secretBox = SecretBox(ct, nonce: aeadNonce.bytes, mac: Mac(tag));
+    final secretKey = SecretKeyData(aeadKey.bytes);
+    final List<int> plaintext;
+    try {
+      plaintext = await aesGcm.decrypt(
+        secretBox,
+        secretKey: secretKey,
+        aad: [],
+      );
+    } on Exception catch (e, st) {
+      throw OhttpCryptoException(
+        'Failed to decrypt OHTTP response',
+        cause: e,
+        stackTrace: st,
+      );
+    } finally {
+      secretKey.destroy();
+    }
+
+    return Uint8List.fromList(plaintext);
+  } finally {
+    aeadKey.erase();
+    aeadNonce.erase();
+  }
 }
 
 // -- Helpers --
