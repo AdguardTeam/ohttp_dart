@@ -501,7 +501,7 @@ void main() {
       expect(ct.length, greaterThan(0));
 
       // The very next call must fail because seq is now 1 << 32.
-      expect(
+      await expectLater(
         () => ctx.seal(Uint8List(0), Uint8List.fromList([0xBB])),
         throwsA(isA<OhttpCryptoException>()),
       );

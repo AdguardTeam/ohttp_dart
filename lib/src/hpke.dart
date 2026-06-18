@@ -347,6 +347,9 @@ class HpkeSender {
 
 /// Sender context returned by [HpkeSender.setupBaseS].
 class HpkeSenderContext {
+  /// Maximum export length (255 × Nh), RFC 9180 §5.3.
+  static const _maxExportLength = 255 * CipherSuite.kdfHashLength;
+
   /// Encapsulated public key (`enc`) sent to the recipient.
   final Uint8List enc;
 
@@ -403,12 +406,11 @@ class HpkeSenderContext {
 
   /// Export a secret from this HPKE context (RFC 9180 §5.3).
   ///
-  /// [length] must be in the range [1, 255 * Nh] (i.e. 1–8160 for HKDF-SHA256).
+  /// [length] must be in the range [1, 255 × Nh] (i.e. 1..[_maxExportLength] for HKDF-SHA256).
   Future<Uint8List> export(Uint8List exporterContext, int length) {
-    // RFC 9180 §5.3: L has a maximum value of 255*Nh.
-    if (length <= 0 || length > 255 * CipherSuite.kdfHashLength) {
+    if (length <= 0 || length > _maxExportLength) {
       throw OhttpCryptoException(
-        'HPKE export length out of range: $length (must be 1..${255 * CipherSuite.kdfHashLength})',
+        'HPKE export length out of range: $length (must be 1..$_maxExportLength)',
         stackTrace: StackTrace.current,
       );
     }

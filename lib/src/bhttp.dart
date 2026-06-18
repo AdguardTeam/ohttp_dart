@@ -13,14 +13,18 @@ import 'exceptions.dart';
 // Varint encoding/decoding (QUIC variable-length integer, RFC 9000 §16)
 // ---------------------------------------------------------------------------
 
+/// Maximum valid QUIC varint value (2^62 - 1), RFC 9000 §16.
+const _maxVarint = 0x3FFFFFFFFFFFFFFF;
+
 /// Encode an integer as a QUIC variable-length integer (RFC 9000 §16).
 ///
 /// The value must be in the range [0, 2^62 - 1].
-/// Throws [OhttpFormatException] if [value] is negative or ≥ 2^62.
+/// Throws [OhttpFormatException] if [value] is negative or > [_maxVarint].
 Uint8List encodeVarint(int value) {
-  if (value < 0 || value >= 0x4000000000000000) {
+  if (value < 0 || value > _maxVarint) {
     throw OhttpFormatException(
-      'varint value $value is outside valid range [0, 0x3FFFFFFFFFFFFFFF] (RFC 9000 §16)',
+      'varint value $value is outside valid range [0, $_maxVarint] (RFC 9000 §16)',
+      stackTrace: StackTrace.current,
     );
   }
   if (value < 0x40) {
