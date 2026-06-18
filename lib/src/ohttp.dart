@@ -281,7 +281,12 @@ Future<Uint8List> ohttpDecapsulate(
   // salt = enc || response_nonce
   final salt = Uint8List.fromList([...enc, ...responseNonce]);
 
-  // prk = HKDF-Extract(salt, secret) — plain HKDF, not labeled
+  // Per RFC 9458 §4.4: prk = HKDF-Extract(salt, exported_secret).
+  // Uses plain HKDF-Extract without label prefixes, as specified. This differs from
+  // the LabeledExtract variant used internally by HPKE (RFC 9180 §4), which prepends
+  // additional context strings to the input keying material. Using LabeledExtract here
+  // would produce a different PRK and cause AES-GCM decryption to fail at runtime.
+  // See also: the empty AAD in the decrypt call below, also required by RFC 9458 §4.4.
   final prk = ErasableByteArray(await HpkeSender.hkdfExtract(salt, exportedSecret));
 
   final ErasableByteArray aeadKey;
@@ -310,7 +315,8 @@ Future<Uint8List> ohttpDecapsulate(
   }
 
   try {
-    // AES-128-GCM decrypt with empty AAD
+    // AES-128-GCM decrypt with empty AAD (RFC 9458 §4.4: aad = "").
+    // Pairing RFC requirement: see plain-HKDF-Extract note above.
     const tagLen = CipherSuite.aeadTagLength;
     if (ciphertext.length < tagLen) {
       throw OhttpDecapsulationException(
