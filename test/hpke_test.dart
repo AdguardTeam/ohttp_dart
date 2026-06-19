@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:kiri_check/kiri_check.dart';
 import 'package:ohttp_dart/ohttp_dart.dart';
 import 'package:ohttp_dart/src/cipher_suite.dart';
 import 'package:test/test.dart';
@@ -20,8 +21,10 @@ Uint8List _hex(String hex) {
 String _toHex(Uint8List bytes) => bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
 void main() {
-  // Diagnostic: verify X25519 DH works with the cryptography package
-  group('X25519 DH diagnostic', () {
+  // Sanity-check that package:cryptography implements X25519 DH correctly.
+  // This test verifies the external dependency, not library code.
+  // It serves as a regression guard when upgrading the cryptography package.
+  group('cryptography package sanity check', () {
     test('RFC 7748 Section 6.1 test vector', () async {
       final aliceSk = _hex(
         '77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a',
@@ -241,10 +244,30 @@ void main() {
         'e9e43065102c3836401bed8c3c3c75ae46be1639869391d62c61f1ec7af54931',
       );
     });
+
+    // Sizes are constants of the ciphersuite, independent of info (RFC 9180 §4, §5.1).
+    property('enc=32B, key=16B, base_nonce=12B, exporter_secret=32B for any info', () {
+      forAll(
+        list(integer(min: 0, max: 255)),
+        (infoList) async {
+          final x = X25519();
+          final kp = await x.newKeyPair();
+          final pk = await kp.extractPublicKey();
+          final ctx = await HpkeSender.setupBaseS(
+            Uint8List.fromList(pk.bytes),
+            Uint8List.fromList(infoList),
+          );
+          expect(ctx.enc.length, CipherSuite.kemPublicKeyLength);
+          expect(ctx.key.bytes.length, CipherSuite.aeadKeyLength);
+          expect(ctx.baseNonce.bytes.length, CipherSuite.aeadNonceLength);
+          expect(ctx.exporterSecret.bytes.length, CipherSuite.kdfHashLength);
+        },
+      );
+    });
   });
 
   group('HKDF RFC 5869 test vectors', () {
-    test('Test Case 1', () async {
+    test('Test Case 1 (basic, SHA-256, non-zero salt/info)', () async {
       final ikm = _hex('0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b');
       final salt = _hex('000102030405060708090a0b0c');
       final info = _hex('f0f1f2f3f4f5f6f7f8f9');
@@ -258,41 +281,103 @@ void main() {
       final okm = await HpkeSender.hkdfExpand(prk, info, 42);
       expect(_toHex(okm), expectedOkm);
     });
+
+    // RFC 5869 Appendix A, Test Case 3: SHA-256, empty salt, empty info.
+    // Also verifies the implementation branch: salt.isEmpty → HashLen zeros,
+    // as required by RFC 5869 §2.2 ("if not provided, set to a string of HashLen zeros").
+    test('Test Case 3 (empty salt, empty info)', () async {
+      final ikm = _hex('0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b');
+
+      const expectedPrk = '19ef24a32c717b167f33a91d6f648bdf96596776afdb6377ac434c1c293ccb04';
+      const expectedOkm = '8da4e775a563c18f715f802a063c5a31b8a11f5c5ee1879ec3454e5f3c738d2d9d201395faa4b61a96c8';
+
+      final prk = await HpkeSender.hkdfExtract(Uint8List(0), ikm);
+      expect(_toHex(prk), expectedPrk);
+
+      final okm = await HpkeSender.hkdfExpand(prk, Uint8List(0), 42);
+      expect(_toHex(okm), expectedOkm);
+    });
   });
 
   group('HKDF utilities', () {
-    test('hkdfExtract with empty salt uses zero-filled salt', () async {
-      final result = await HpkeSender.hkdfExtract(
-        Uint8List(0),
-        Uint8List.fromList(utf8.encode('test')),
+    // RFC 5869 §2.2: PRK is always HashLen octets, regardless of input sizes.
+    property('output is always Nh=32 bytes for any salt and ikm', () {
+      forAll(
+        combine2(
+          list(integer(min: 0, max: 255)),
+          list(integer(min: 0, max: 255)),
+        ),
+        (args) async {
+          final (saltList, ikmList) = args;
+          final prk = await HpkeSender.hkdfExtract(
+            Uint8List.fromList(saltList),
+            Uint8List.fromList(ikmList),
+          );
+          expect(prk.length, CipherSuite.kdfHashLength);
+        },
       );
-      expect(result.length, CipherSuite.kdfHashLength);
     });
 
-    test('hkdfExpand produces correct length', () async {
-      final prk = await HpkeSender.hkdfExtract(
-        Uint8List.fromList(utf8.encode('salt')),
-        Uint8List.fromList(utf8.encode('ikm')),
+    // RFC 5869 §2.2: PRK = HMAC-Hash(salt, IKM) is a pure function of its inputs.
+    property('same (salt, ikm) always produces the same PRK (determinism)', () {
+      forAll(
+        combine2(
+          list(integer(min: 0, max: 255)),
+          list(integer(min: 0, max: 255)),
+        ),
+        (args) async {
+          final (saltList, ikmList) = args;
+          final salt = Uint8List.fromList(saltList);
+          final ikm = Uint8List.fromList(ikmList);
+          final prk1 = await HpkeSender.hkdfExtract(salt, ikm);
+          final prk2 = await HpkeSender.hkdfExtract(salt, ikm);
+          expect(prk1, equals(prk2));
+        },
       );
-      final okm = await HpkeSender.hkdfExpand(
-        prk,
-        Uint8List.fromList(utf8.encode('info')),
-        CipherSuite.kdfHashLength,
-      );
-      expect(okm.length, CipherSuite.kdfHashLength);
     });
 
-    test('hkdfExpand for 32 bytes', () async {
-      final prk = await HpkeSender.hkdfExtract(
-        Uint8List.fromList(utf8.encode('salt')),
-        Uint8List.fromList(utf8.encode('ikm')),
+    // RFC 5869 §2.3: L ≤ 255*HashLen and OKM is "of L octets".
+    property('output length equals requested L for any valid L and any info', () {
+      forAll(
+        combine2(
+          list(integer(min: 0, max: 255)),
+          integer(min: 1, max: 255 * CipherSuite.kdfHashLength),
+        ),
+        (args) async {
+          final (infoList, l) = args;
+          final prk = Uint8List(CipherSuite.kdfHashLength);
+          final okm = await HpkeSender.hkdfExpand(
+            prk,
+            Uint8List.fromList(infoList),
+            l,
+          );
+          expect(okm.length, l);
+        },
       );
-      final okm = await HpkeSender.hkdfExpand(
-        prk,
-        Uint8List.fromList(utf8.encode('info')),
-        32,
+    });
+
+    // RFC 5869 §2.3: OKM = first L octets of (T(1) || T(2) || ...).
+    property('shorter output is a prefix of longer output for the same PRK and info', () {
+      forAll(
+        combine3(
+          list(integer(min: 0, max: 255)),
+          integer(min: 1, max: 254),
+          integer(min: 1, max: 254),
+        ),
+        (args) async {
+          final (infoList, l1Raw, l2Raw) = args;
+          if (l1Raw == l2Raw) {
+            return;
+          }
+          final l1 = l1Raw < l2Raw ? l1Raw : l2Raw;
+          final l2 = l1Raw < l2Raw ? l2Raw : l1Raw;
+          final prk = Uint8List(CipherSuite.kdfHashLength);
+          final info = Uint8List.fromList(infoList);
+          final short = await HpkeSender.hkdfExpand(prk, info, l1);
+          final long = await HpkeSender.hkdfExpand(prk, info, l2);
+          expect(long.sublist(0, l1), equals(short));
+        },
       );
-      expect(okm.length, 32);
     });
   });
 
@@ -336,6 +421,287 @@ void main() {
 
       // enc must remain unchanged
       expect(ctx.enc, encBefore);
+    });
+
+    test('seal throws StateError after dispose', () async {
+      final x = X25519();
+      final kp = await x.newKeyPair();
+      final pk = await kp.extractPublicKey();
+
+      final ctx = await HpkeSender.setupBaseS(
+        Uint8List.fromList(pk.bytes),
+        Uint8List.fromList(utf8.encode('test')),
+      );
+
+      ctx.dispose();
+
+      await expectLater(
+        () => ctx.seal(Uint8List(0), Uint8List.fromList([0x01])),
+        throwsStateError,
+      );
+    });
+
+    test('export throws StateError after dispose', () async {
+      final x = X25519();
+      final kp = await x.newKeyPair();
+      final pk = await kp.extractPublicKey();
+
+      final ctx = await HpkeSender.setupBaseS(
+        Uint8List.fromList(pk.bytes),
+        Uint8List.fromList(utf8.encode('test')),
+      );
+
+      ctx.dispose();
+
+      expect(
+        () => ctx.export(Uint8List(0), 32),
+        throwsStateError,
+      );
+    });
+  });
+
+  group('sequence number overflow in seal', () {
+    // RFC 9180 §5.2: sequence number must not exceed 2^Nn - 1.
+    // Our implementation uses a 32-bit Dart int and throws at seq >= 2^32.
+
+    // RFC 9180 §5.2: any seq >= 2^32 must be rejected regardless of exact value.
+    property('seal throws OhttpCryptoException for any seq >= 2^32', () {
+      forAll(
+        integer(min: 1 << 32, max: (1 << 32) + 1000),
+        (seq) async {
+          final x = X25519();
+          final kp = await x.newKeyPair();
+          final pk = await kp.extractPublicKey();
+          final ctx = await HpkeSender.setupBaseS(
+            Uint8List.fromList(pk.bytes),
+            Uint8List.fromList(utf8.encode('overflow-prop')),
+          );
+          ctx.seqForTesting = seq;
+          await expectLater(
+            () => ctx.seal(Uint8List(0), Uint8List.fromList([0x01])),
+            throwsA(isA<OhttpCryptoException>()),
+          );
+        },
+      );
+    });
+
+    test('seal succeeds at seq == 2^32 - 1 (last valid call)', () async {
+      final x = X25519();
+      final kp = await x.newKeyPair();
+      final pk = await kp.extractPublicKey();
+
+      final ctx = await HpkeSender.setupBaseS(
+        Uint8List.fromList(pk.bytes),
+        Uint8List.fromList(utf8.encode('overflow-boundary')),
+      );
+
+      ctx.seqForTesting = (1 << 32) - 1;
+
+      final ct = await ctx.seal(Uint8List(0), Uint8List.fromList([0xAA]));
+      expect(ct.length, greaterThan(0));
+
+      // The very next call must fail because seq is now 1 << 32.
+      await expectLater(
+        () => ctx.seal(Uint8List(0), Uint8List.fromList([0xBB])),
+        throwsA(isA<OhttpCryptoException>()),
+      );
+    });
+
+    // RFC 9180 §5.2: ciphertext = Seal(key, nonce, aad, pt), length is pt.length + Nt.
+    property('ciphertext length equals plaintext.length + Nt=16 for any plaintext', () {
+      forAll(
+        list(integer(min: 0, max: 255)),
+        (ptList) async {
+          final x = X25519();
+          final kp = await x.newKeyPair();
+          final pk = await kp.extractPublicKey();
+          final ctx = await HpkeSender.setupBaseS(
+            Uint8List.fromList(pk.bytes),
+            Uint8List.fromList(utf8.encode('seal-length-prop')),
+          );
+          final ct = await ctx.seal(Uint8List(0), Uint8List.fromList(ptList));
+          expect(ct.length, ptList.length + CipherSuite.aeadTagLength);
+        },
+      );
+    });
+
+    // RFC 9180 §5.2: nonce = base_nonce XOR seq, and seq is incremented on every Seal call.
+    property('K sequential seal calls with equal plaintext/AAD produce K distinct ciphertexts', () {
+      forAll(
+        integer(min: 2, max: 15),
+        (k) async {
+          final x = X25519();
+          final kp = await x.newKeyPair();
+          final pk = await kp.extractPublicKey();
+          final ctx = await HpkeSender.setupBaseS(
+            Uint8List.fromList(pk.bytes),
+            Uint8List.fromList(utf8.encode('seal-uniqueness-prop')),
+          );
+          final pt = Uint8List.fromList([0xAB, 0xCD]);
+          final aad = Uint8List(0);
+          final seen = <String>{};
+          for (var i = 0; i < k; i++) {
+            final ct = await ctx.seal(aad, pt);
+            seen.add(_toHex(ct));
+          }
+          expect(seen.length, k, reason: 'all $k ciphertexts must be distinct');
+        },
+      );
+    });
+  });
+
+  // RFC 9180 §7.1.4 + RFC 7748 §6.1: the DH result MUST NOT be the all-zero value.
+  // All small-subgroup (low-order) X25519 points produce an all-zero DH output
+  // due to cofactor-8 scalar clamping, so setupBaseS must reject them.
+  //
+  // Points verified experimentally with package:cryptography 2.9.0.
+  // Sources: RFC 7748, libsodium rejection list, Curve25519 torsion subgroup.
+  group('setupBaseS rejects invalid public key length', () {
+    // X25519 public keys must be exactly 32 bytes (RFC 7748 §5, RFC 9180 §4.1).
+    property('throws OhttpCryptoException for any length != 32', () {
+      forAll(
+        integer(min: 0, max: 64).filter((len) => len != CipherSuite.kemPublicKeyLength),
+        (len) async {
+          await expectLater(
+            () => HpkeSender.setupBaseS(
+              Uint8List(len),
+              Uint8List.fromList(utf8.encode('test-info')),
+            ),
+            throwsA(isA<OhttpCryptoException>()),
+          );
+        },
+      );
+    });
+  });
+
+  group('setupBaseS rejects low-order X25519 public keys (RFC 9180 §4.3)', () {
+    // Each entry: (description, 64-char little-endian hex u-coordinate).
+    const lowOrderPoints = <(String, String)>[
+      // u = 0: the point at infinity / identity element.
+      ('zero key (u=0)', '0000000000000000000000000000000000000000000000000000000000000000'),
+      // u = 1: first non-trivial torsion point (order 8).
+      ('u=1', '0100000000000000000000000000000000000000000000000000000000000000'),
+      // Order-8 torsion point from the libsodium / Bernstein rejection list.
+      ('order-8 torsion point (e0eb…b800)', 'e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800'),
+      // Order-4 torsion point.
+      ('order-4 torsion point (5f9c…1157)', '5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f1157'),
+      // u = p − 1 (= −1 in GF(2²⁵⁵−19)): order-2 point.
+      ('u = p−1 (order-2, ec…7f)', 'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f'),
+      // u = p (≡ 0 mod p): same equivalence class as u=0.
+      ('u = p (≡ 0 mod p, ed…7f)', 'edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f'),
+      // u = p + 1 (≡ 1 mod p): same equivalence class as u=1.
+      ('u = p+1 (≡ 1 mod p, ee…7f)', 'eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f'),
+    ];
+
+    for (final (description, hex) in lowOrderPoints) {
+      test('throws OhttpCryptoException for $description', () async {
+        await expectLater(
+          () => HpkeSender.setupBaseS(
+            _hex(hex),
+            Uint8List.fromList(utf8.encode('test-info')),
+          ),
+          throwsA(isA<OhttpCryptoException>()),
+        );
+      });
+    }
+  });
+
+  // RFC 9180 §5.3: L must be in [1, 255*Nh]. For HKDF-SHA256: Nh=32, max=8160.
+  group('HpkeSenderContext.export invalid length (RFC 9180 §5.3)', () {
+    Future<HpkeSenderContext> makeCtx() async {
+      final x = X25519();
+      final kp = await x.newKeyPair();
+      final pk = await kp.extractPublicKey();
+
+      return HpkeSender.setupBaseS(
+        Uint8List.fromList(pk.bytes),
+        Uint8List.fromList(utf8.encode('export-length-test')),
+      );
+    }
+
+    test('throws OhttpCryptoException for length == 0', () async {
+      final ctx = await makeCtx();
+      expect(
+        () => ctx.export(Uint8List(0), 0),
+        throwsA(isA<OhttpCryptoException>()),
+      );
+    });
+
+    test('throws OhttpCryptoException for length == -1', () async {
+      final ctx = await makeCtx();
+      expect(
+        () => ctx.export(Uint8List(0), -1),
+        throwsA(isA<OhttpCryptoException>()),
+      );
+    });
+
+    test('throws OhttpCryptoException for length > 255*Nh (8161)', () async {
+      final ctx = await makeCtx();
+      // 255 * 32 = 8160 is the max; 8161 must be rejected.
+      expect(
+        () => ctx.export(Uint8List(0), 255 * CipherSuite.kdfHashLength + 1),
+        throwsA(isA<OhttpCryptoException>()),
+      );
+    });
+
+    test('succeeds for length == 1 (minimum valid)', () async {
+      final ctx = await makeCtx();
+      final result = await ctx.export(Uint8List(0), 1);
+      expect(result.length, 1);
+    });
+
+    test('succeeds for length == 255*Nh (maximum valid)', () async {
+      final ctx = await makeCtx();
+      final result = await ctx.export(Uint8List(0), 255 * CipherSuite.kdfHashLength);
+      expect(result.length, 255 * CipherSuite.kdfHashLength);
+    });
+
+    // RFC 9180 §5.3: Export delegates to LabeledExpand(exporter_secret, "sec", ctx, L),
+    // which forwards L to HKDF-Expand (RFC 5869 §2.3).
+    property('output length equals requested L for any exporter context and valid L', () {
+      forAll(
+        combine2(
+          list(integer(min: 0, max: 255)),
+          integer(min: 1, max: 255 * CipherSuite.kdfHashLength),
+        ),
+        (args) async {
+          final (exportCtxList, l) = args;
+          final x = X25519();
+          final kp = await x.newKeyPair();
+          final pk = await kp.extractPublicKey();
+          final senderCtx = await HpkeSender.setupBaseS(
+            Uint8List.fromList(pk.bytes),
+            Uint8List.fromList(utf8.encode('export-length-prop')),
+          );
+          final exported = await senderCtx.export(Uint8List.fromList(exportCtxList), l);
+          expect(exported.length, l);
+        },
+      );
+    });
+
+    // RFC 9180 §5.3: export is a pure function of (exporter_secret, context, L) —
+    // it must not modify any context state, so repeated calls must return identical bytes.
+    property('two consecutive export calls with same context and L return identical bytes', () {
+      forAll(
+        combine2(
+          list(integer(min: 0, max: 255)),
+          integer(min: 1, max: 255 * CipherSuite.kdfHashLength),
+        ),
+        (args) async {
+          final (exportCtxList, l) = args;
+          final x = X25519();
+          final kp = await x.newKeyPair();
+          final pk = await kp.extractPublicKey();
+          final senderCtx = await HpkeSender.setupBaseS(
+            Uint8List.fromList(pk.bytes),
+            Uint8List.fromList(utf8.encode('export-determinism-prop')),
+          );
+          final exportCtx = Uint8List.fromList(exportCtxList);
+          final first = await senderCtx.export(exportCtx, l);
+          final second = await senderCtx.export(exportCtx, l);
+          expect(first, equals(second));
+        },
+      );
     });
   });
 }

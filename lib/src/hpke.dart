@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:meta/meta.dart';
 
 import 'cipher_suite.dart';
 import 'erasable_byte_array.dart';
@@ -140,6 +141,14 @@ class HpkeSender {
     Uint8List recipientPkBytes, {
     SimpleKeyPairData? testKeyPair,
   }) async {
+    // RFC 9180 §7.1 Table 2: DHKEM(X25519, HKDF-SHA256) defines Npk = 32 bytes.
+    if (recipientPkBytes.length != CipherSuite.kemPublicKeyLength) {
+      throw OhttpCryptoException(
+        'HPKE KEM encap: recipient public key must be '
+        '${CipherSuite.kemPublicKeyLength} bytes, got ${recipientPkBytes.length}',
+        stackTrace: StackTrace.current,
+      );
+    }
     try {
       // Ephemeral keypair
       final KeyPair ephKp;
@@ -166,12 +175,20 @@ class HpkeSender {
       final dh = ErasableByteArray(
         Uint8List.fromList(await dhResult.extractBytes()),
       );
-
-      // kem_context = enc || pkR
-      final kemContext = Uint8List.fromList([...enc, ...recipientPkBytes]);
-
-      // shared_secret = ExtractAndExpand(dh, kem_context)
       try {
+        // RFC 9180 §7.1.4: abort if the X25519 DH output is the all-zero value.
+        if (dh.bytes.every((b) => b == 0)) {
+          throw OhttpCryptoException(
+            'HPKE KEM encap: DH result is the identity element — '
+            'recipient public key is a low-order point (RFC 9180 §7.1.4)',
+            stackTrace: StackTrace.current,
+          );
+        }
+
+        // kem_context = enc || pkR
+        final kemContext = Uint8List.fromList([...enc, ...recipientPkBytes]);
+
+        // shared_secret = ExtractAndExpand(dh, kem_context)
         final sharedSecret = ErasableByteArray(
           await _extractAndExpand(dh.bytes, kemContext),
         );
@@ -330,6 +347,9 @@ class HpkeSender {
 
 /// Sender context returned by [HpkeSender.setupBaseS].
 class HpkeSenderContext {
+  /// Maximum export length (255 × Nh), RFC 9180 §5.3.
+  static const _maxExportLength = 255 * CipherSuite.kdfHashLength;
+
   /// Encapsulated public key (`enc`) sent to the recipient.
   final Uint8List enc;
 
@@ -350,6 +370,10 @@ class HpkeSenderContext {
   });
 
   int _seq = 0;
+
+  /// Overrides the internal sequence counter. For testing only.
+  @visibleForTesting
+  set seqForTesting(int value) => _seq = value;
 
   /// Seal (encrypt) a plaintext with AAD.
   /// Returns ciphertext || 16-byte auth tag.
@@ -381,13 +405,24 @@ class HpkeSenderContext {
   }
 
   /// Export a secret from this HPKE context (RFC 9180 §5.3).
-  Future<Uint8List> export(Uint8List exporterContext, int length) => HpkeSender._labeledExpand(
-    HpkeSender._hpkeSuiteId,
-    exporterSecret.bytes,
-    utf8.encode('sec'),
-    exporterContext,
-    length,
-  );
+  ///
+  /// [length] must be in the range [1, 255 × Nh] (i.e. 1..[_maxExportLength] for HKDF-SHA256).
+  Future<Uint8List> export(Uint8List exporterContext, int length) {
+    if (length <= 0 || length > _maxExportLength) {
+      throw OhttpCryptoException(
+        'HPKE export length out of range: $length (must be 1..$_maxExportLength)',
+        stackTrace: StackTrace.current,
+      );
+    }
+
+    return HpkeSender._labeledExpand(
+      HpkeSender._hpkeSuiteId,
+      exporterSecret.bytes,
+      utf8.encode('sec'),
+      exporterContext,
+      length,
+    );
+  }
 
   /// Zeroes out sensitive cryptographic data (key, base_nonce, exporter secret).
   /// The `enc` (public key) is NOT zeroed — it is an ephemeral public key

@@ -224,7 +224,22 @@ Future<OhttpEncapsulateResult> ohttpEncapsulate(
   );
 
   try {
-    // Seal with empty AAD (per reference Go implementation, not RFC header)
+    // RFC 9458 §4.3 specifies empty AAD: ct = sctxt.Seal("", request).
+    //
+    // Potential ambiguity in §4.3: the section also describes constructing a
+    // request header (key_id, kem_id, kdf_id, aead_id) and binding it into the
+    // HPKE info string, which could be misread as a suggestion to also pass it
+    // as AAD. That reading is incorrect — the header is already bound through
+    // the info string (§4.3 step 2), and the pseudocode in §4.3 step 3 passes
+    // "" (empty string) as the AAD explicitly. Passing the header as AAD would
+    // diverge from the pseudocode and silently break wire compatibility.
+    //
+    // DO NOT change the AAD without coordinating:
+    //   1. The gateway implementation — must use the identical AAD value.
+    //   2. The bundled RFC test vectors — hardcoded for empty AAD.
+    // Any AAD mismatch causes AES-GCM authentication to fail (AAD is part of
+    // the MAC computation), so such a change compiles cleanly and passes local
+    // tests, but silently breaks communication with every conformant gateway.
     final ct = await ctx.seal(Uint8List(0), binaryRequest);
 
     // Export secret for response decryption
@@ -272,7 +287,14 @@ Future<Uint8List> ohttpDecapsulate(
   // salt = enc || response_nonce
   final salt = Uint8List.fromList([...enc, ...responseNonce]);
 
-  // prk = HKDF-Extract(salt, secret) — plain HKDF, not labeled
+  // Per RFC 9458 §4.4: prk = HKDF-Extract(salt, exported_secret).
+  // Uses plain HKDF-Extract without label prefixes, as specified. This differs from
+  // the LabeledExtract variant used internally by HPKE (RFC 9180 §4), which prepends
+  // additional context strings to the input keying material. Using LabeledExtract here
+  // would produce a different PRK and cause AES-GCM decryption to fail at runtime.
+  // See also: the empty-AAD rationale in ohttpEncapsulate (RFC 9458 §4.3) — both
+  // choices follow the same principle: use the exact primitive specified by OHTTP,
+  // not the labeled variants used internally by HPKE.
   final prk = ErasableByteArray(await HpkeSender.hkdfExtract(salt, exportedSecret));
 
   final ErasableByteArray aeadKey;
@@ -301,7 +323,8 @@ Future<Uint8List> ohttpDecapsulate(
   }
 
   try {
-    // AES-128-GCM decrypt with empty AAD
+    // AES-128-GCM decrypt with empty AAD (RFC 9458 §4.4: aad = "").
+    // Pairing RFC requirement: see plain-HKDF-Extract note above.
     const tagLen = CipherSuite.aeadTagLength;
     if (ciphertext.length < tagLen) {
       throw OhttpDecapsulationException(
