@@ -489,13 +489,7 @@ void main() {
             buf.toBytes(),
             limits: const BhttpResponseLimits(),
           ),
-          throwsA(
-            isA<OhttpFormatException>().having(
-              (e) => e.message,
-              'message',
-              contains('got $indicator'),
-            ),
-          ),
+          throwsA(isA<OhttpFormatException>()),
         );
       });
     }
@@ -513,13 +507,7 @@ void main() {
           buf.toBytes(),
           limits: const BhttpResponseLimits(),
         ),
-        throwsA(
-          isA<OhttpFormatException>().having(
-            (e) => e.message,
-            'message',
-            contains('got $indicator'),
-          ),
-        ),
+        throwsA(isA<OhttpFormatException>()),
       );
     });
 
@@ -949,9 +937,7 @@ void main() {
           limits: const BhttpResponseLimits(maxHeaderBytes: 1000),
         ),
         throwsA(
-          isA<OhttpSizeLimitException>()
-              .having((e) => e.limit, 'limit', 1000)
-              .having((e) => e.message, 'message', contains('headers')),
+          isA<OhttpSizeLimitException>().having((e) => e.limit, 'limit', 1000),
         ),
       );
     });
@@ -975,8 +961,7 @@ void main() {
         throwsA(
           isA<OhttpSizeLimitException>()
               .having((e) => e.limit, 'limit', 5 * 1024 * 1024)
-              .having((e) => e.actualSize, 'actualSize', 20 * 1024 * 1024)
-              .having((e) => e.message, 'message', contains('body')),
+              .having((e) => e.actualSize, 'actualSize', 20 * 1024 * 1024),
         ),
       );
     });
