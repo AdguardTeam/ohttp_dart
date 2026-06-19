@@ -212,10 +212,10 @@ void main() {
       );
     });
 
-    // 8-byte varint range: [0x40000000, 0x7FFFFFFF]
-    property('roundtrip: 8-byte values [0x40000000, 0x7FFFFFFE]', () {
+    // Full 8-byte varint range (RFC 9000 §16): [0x40000000, 0x3FFFFFFFFFFFFFFF].
+    property('roundtrip: 8-byte values [0x40000000, 0x3FFFFFFFFFFFFFFF]', () {
       forAll(
-        integer(min: 0x40000000, max: 0x7FFFFFFF),
+        integer(min: 0x40000000, max: 0x3FFFFFFFFFFFFFFF),
         (value) {
           final encoded = encodeVarint(value);
           expect(encoded.length, 8, reason: 'value=$value must encode as 8 bytes');
@@ -587,9 +587,9 @@ void main() {
             limits: const BhttpResponseLimits(),
           );
           expect(resp.headers.length, headers.length);
-          for (var i = 0; i < headers.length; i++) {
-            expect(resp.headers[i].$1, headers[i].$1);
-            expect(resp.headers[i].$2, headers[i].$2);
+          for (final (i, header) in headers.indexed) {
+            expect(resp.headers[i].$1, header.$1);
+            expect(resp.headers[i].$2, header.$2);
           }
         },
       );

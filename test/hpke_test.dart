@@ -267,7 +267,7 @@ void main() {
   });
 
   group('HKDF RFC 5869 test vectors', () {
-    test('Test Case 1', () async {
+    test('Test Case 1 (basic, SHA-256, non-zero salt/info)', () async {
       final ikm = _hex('0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b');
       final salt = _hex('000102030405060708090a0b0c');
       final info = _hex('f0f1f2f3f4f5f6f7f8f9');

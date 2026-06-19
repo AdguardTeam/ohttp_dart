@@ -180,7 +180,7 @@ class HpkeSender {
         if (dh.bytes.every((b) => b == 0)) {
           throw OhttpCryptoException(
             'HPKE KEM encap: DH result is the identity element — '
-            'recipient public key is a low-order point (RFC 9180 §4.3)',
+            'recipient public key is a low-order point (RFC 9180 §7.1.4)',
             stackTrace: StackTrace.current,
           );
         }
