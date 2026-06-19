@@ -13,7 +13,7 @@ void main() {
       expect(encodeVarint(63), [0x3F]);
     });
 
-    test('2-byte values (64–16383)', () {
+    test('2-byte values (64–2^14 - 1)', () {
       final encoded = encodeVarint(64);
       expect(encoded, [0x40, 0x40]);
 
@@ -21,11 +21,11 @@ void main() {
       expect(encoded2, [0x7F, 0xFF]);
     });
 
-    test('4-byte values (16384–1073741823)', () {
+    test('4-byte values (2^14–2^30 - 1)', () {
       final encoded = encodeVarint(16384);
       expect(encoded, [0x80, 0x00, 0x40, 0x00]);
 
-      final encoded2 = encodeVarint(1073741823);
+      final encoded2 = encodeVarint(0x3FFFFFFF);
       expect(encoded2, [0xBF, 0xFF, 0xFF, 0xFF]);
     });
 
@@ -39,14 +39,14 @@ void main() {
 
     property('first-byte top 2 bits are 0b01 for 2-byte values', () {
       forAll(
-        integer(min: 64, max: 16383),
+        integer(min: 64, max: 0x3FFF),
         (value) => expect(encodeVarint(value)[0] >> 6, 1),
       );
     });
 
     property('first-byte top 2 bits are 0b10 for 4-byte values', () {
       forAll(
-        integer(min: 16384, max: 0x3FFFFFFF),
+        integer(min: 0x4000, max: 0x3FFFFFFF),
         (value) => expect(encodeVarint(value)[0] >> 6, 2),
       );
     });
@@ -80,12 +80,12 @@ void main() {
       expect(decodeVarint(data, 0), (64, 2));
 
       final data2 = Uint8List.fromList([0x7F, 0xFF]);
-      expect(decodeVarint(data2, 0), (16383, 2));
+      expect(decodeVarint(data2, 0), (0x3FFF, 2));
     });
 
     test('4-byte decode', () {
       final data = Uint8List.fromList([0x80, 0x00, 0x40, 0x00]);
-      expect(decodeVarint(data, 0), (16384, 4));
+      expect(decodeVarint(data, 0), (0x4000, 4));
     });
 
     test('decode with offset', () {
@@ -93,12 +93,12 @@ void main() {
       expect(decodeVarint(data, 2), (5, 1));
     });
 
-    // Range [0, 16384) covers the 1-byte and 2-byte varint ranges
-    // plus the 16383→16384 length-boundary (RFC 9000 §16).
+    // Range [0, 2^14) covers the 1-byte and 2-byte varint ranges
+    // plus the 2^14 - 1 → 2^14 length-boundary (RFC 9000 §16).
     property('decode at arbitrary byte offset returns correct value and length', () {
       forAll(
         combine2(
-          integer(min: 0, max: 16383),
+          integer(min: 0, max: 0x3FFF),
           integer(min: 0, max: 9),
         ),
         (args) {
@@ -112,7 +112,7 @@ void main() {
       );
     });
 
-    // Range [0, 0x40000000) covers 1-byte, 2-byte, and 4-byte varint encodings
+    // Range [0, 2^30) covers 1-byte, 2-byte, and 4-byte varint encodings
     // (RFC 9000 §16). 8-byte varints are covered by the roundtrip group.
     property('sequential concatenated varints decode without loss', () {
       forAll(
@@ -147,7 +147,7 @@ void main() {
 
     // RFC 9000 §16: 8-byte varint boundary
     test('largest 4-byte value (0x3FFFFFFF = 2^30 - 1) roundtrips as 4 bytes', () {
-      const value = 0x3FFFFFFF; // 1073741823
+      const value = 0x3FFFFFFF; // 2^30 - 1
       final encoded = encodeVarint(value);
       expect(encoded.length, 4, reason: 'largest 4-byte varint must be 4 bytes');
       final (decoded, len) = decodeVarint(Uint8List.fromList(encoded), 0);
@@ -156,7 +156,7 @@ void main() {
     });
 
     test('smallest 8-byte value (0x40000000 = 2^30) roundtrips as 8 bytes', () {
-      const value = 0x40000000; // 1073741824
+      const value = 0x40000000; // 2^30
       final encoded = encodeVarint(value);
       expect(encoded.length, 8, reason: 'smallest 8-byte varint must be 8 bytes');
       final (decoded, len) = decodeVarint(Uint8List.fromList(encoded), 0);
@@ -165,7 +165,7 @@ void main() {
     });
 
     test('largest 8-byte value (2^62 - 1) roundtrips as 8 bytes', () {
-      const value = 0x3FFFFFFFFFFFFFFF; // 4611686018427387903
+      const value = 0x3FFFFFFFFFFFFFFF; // 2^62 - 1
       final encoded = encodeVarint(value);
       expect(encoded.length, 8, reason: 'largest valid varint must be 8 bytes');
       final (decoded, len) = decodeVarint(Uint8List.fromList(encoded), 0);
@@ -186,9 +186,9 @@ void main() {
       );
     });
 
-    property('roundtrip: 2-byte values [64, 16383]', () {
+    property('roundtrip: 2-byte values [64, 2^14 - 1]', () {
       forAll(
-        integer(min: 64, max: 16383),
+        integer(min: 64, max: 0x3FFF),
         (value) {
           final encoded = encodeVarint(value);
           expect(encoded.length, 2, reason: 'value=$value must encode as 2 bytes');
@@ -199,9 +199,9 @@ void main() {
       );
     });
 
-    property('roundtrip: 4-byte values [16384, 0x3FFFFFFF]', () {
+    property('roundtrip: 4-byte values [2^14, 2^30 - 1]', () {
       forAll(
-        integer(min: 16384, max: 0x3FFFFFFF),
+        integer(min: 0x4000, max: 0x3FFFFFFF),
         (value) {
           final encoded = encodeVarint(value);
           expect(encoded.length, 4, reason: 'value=$value must encode as 4 bytes');
@@ -212,8 +212,8 @@ void main() {
       );
     });
 
-    // Full 8-byte varint range (RFC 9000 §16): [0x40000000, 0x3FFFFFFFFFFFFFFF].
-    property('roundtrip: 8-byte values [0x40000000, 0x3FFFFFFFFFFFFFFF]', () {
+    // Full 8-byte varint range (RFC 9000 §16): [2^30, 2^62 - 1].
+    property('roundtrip: 8-byte values [2^30, 2^62 - 1]', () {
       forAll(
         integer(min: 0x40000000, max: 0x3FFFFFFFFFFFFFFF),
         (value) {
@@ -516,7 +516,7 @@ void main() {
       final buf = BytesBuilder();
       buf.add(
         encodeVarint(0x40000000),
-      ); // invalid framing indicator (value 1073741824, must be 0 or 1 per RFC 9292 §3.3)
+      ); // invalid framing indicator (value 2^30, must be 0 or 1 per RFC 9292 §3.3)
       buf.add(encodeVarint(200));
       buf.add(encodeVarint(0));
       buf.add(encodeVarint(0));
