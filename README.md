@@ -38,24 +38,24 @@ Sessions accept an optional `OhttpObserver` to receive lifecycle event notificat
 class MyObserver extends OhttpObserver {
   @override
   void onKeyConfigFetched() => print('Key config fetched');
-  
+
   @override
   void onKeyConfigCacheHit() => print('Using cached key config');
-  
+
   @override
   void onPostToGateway() => print('Posting to gateway');
-  
+
   @override
-  void onDecapsulationError([Object? error]) => print('Decapsulation failed: $error');
-  
+  void onDecapsulationError(Type errorType) => print('Decapsulation failed: $errorType');
+
   @override
-  void onGatewayError([Object? error]) => print('Gateway error: $error');
-  
+  void onGatewayError(int statusCode) => print('Gateway error: $statusCode');
+
   @override
   void onCacheInvalidated() => print('Cache invalidated');
-  
+
   @override
-  void onEncapsulationError([Object? error]) => print('Encapsulation failed: $error');
+  void onEncapsulationError(Type errorType) => print('Encapsulation failed: $errorType');
 }
 
 final session = OhttpSession.withTransport(
@@ -66,6 +66,8 @@ final session = OhttpSession.withTransport(
 
 Observer methods have no-op defaults, so you only override the events you care about.
 Observer errors are suppressed via `notifySafe()` — they never affect the OHTTP pipeline.
+Callbacks only ever receive safe metadata (the error `Type`, an HTTP status code) — never
+keys, nonces, shared secrets, or plaintext request/response bodies.
 
 ## Project Structure
 
@@ -85,7 +87,7 @@ lib/
     ├── ohttp_observer.dart             # Lifecycle event observer interface
     ├── ohttp_session.dart              # OHTTP session orchestrator
     ├── ohttp_transport.dart            # Transport abstraction interface
-    ├── wipe_bytes_extension.dart      # Secure memory wipe utility
+    ├── erasable_byte_array.dart        # Byte buffer that zeroes on erase(), guards post-erase reads
     └── adapters/
         └── http/
             ├── http_client_transport.dart   # HttpClientTransport implementation
@@ -237,6 +239,9 @@ class DioTransport implements OhttpTransport {
 |---------|---------|---------|
 | `cryptography` | 2.9.0 | Pure Dart crypto primitives (X25519, HMAC, AES-GCM) |
 | `http` | 1.6.0 | HTTP client for the `package:http` adapter |
+| `meta` | 1.16.0 | Annotations (`@visibleForTesting`) |
+
+Dev dependencies: `test` 1.25.6, `kiri_check` 1.3.1 (property-based testing), `lints` 3.0.0.
 
 ## Testing
 
@@ -252,6 +257,10 @@ Tests cover:
 - Observer lifecycle events and error suppression
 - Session orchestration and pipeline integration
 - `package:http` adapter integration
+- `ErasableByteArray` zeroing and post-erase guard
+
+HPKE and BHTTP also have property-based tests (via `kiri_check`) alongside the
+fixed RFC vectors.
 
 ## License
 
