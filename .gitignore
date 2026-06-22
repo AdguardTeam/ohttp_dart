@@ -20,3 +20,5 @@ pubspec.lock
 .vscode/
 
 skills-lock.json
+
+specs/
