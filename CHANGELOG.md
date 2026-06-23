@@ -1,5 +1,11 @@
 ## Unreleased
 
+### AW-2953 Phase 3 — End-to-end integration tests
+
+- Added `test/integration/ohttp_pipeline_test.dart` with two end-to-end integration tests: a happy-path full round-trip (KeyConfig discovery → HPKE encapsulation → gateway POST → real KEM Decap in the stub → decapsulation → BHTTP parse; asserts `statusCode 200`, body, and observer flags) and a cache-hit test (second `send()` within TTL issues exactly one GET to the keys endpoint; asserts `observer.keyConfigCacheHit`).
+- Extended `test/support/gateway_stub.dart` with `decapExportedSecret` — a full HPKE KEM Decap implementation (RFC 9180 §7.1.2) using the gateway private key — plus private `_labeledExtract`/`_labeledExpand` helpers. These enable the stub to independently re-derive the exported secret and seal a canned BHTTP response for the client to decapsulate.
+- No production code changed; no new dependencies added.
+
 ### AW-2953 Phase 2 — Fuzz / property-based tests
 
 - Added `test/integration/fuzz_test.dart` with three `kiri_check` property tests: varint round-trip identity on `[0, 2^62)`, `parseResponse` typed-exception closure (only `OhttpFormatException` or `OhttpSizeLimitException` may escape), and `OhttpKeyConfig.parse` typed-exception closure (only `OhttpKeyConfigException` or `OhttpUnsupportedSuiteException` may escape). All properties run with `seed: 42` for deterministic CI output.
