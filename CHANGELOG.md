@@ -1,5 +1,10 @@
 ## Unreleased
 
+### AW-2953 Phase 4 — Failure-path integration tests
+
+- Added 5 failure-path tests to `test/integration/ohttp_pipeline_test.dart`: gateway 503 (`OhttpGatewayException` with `statusCode == 503` + cache-invalidation verified by a second GET to `keysUrl`), flipped ciphertext byte (`OhttpCryptoException`), truncated response body below `responseNonceLen` (`OhttpDecapsulationException`), gateway POST delay 2 s vs. 100 ms transport timeout (`OhttpTimeoutException`), and 512-byte response body vs. 64-byte cap (`OhttpSizeLimitException`). All five tests use the most-specific shipped exception subtype and assert matching `OhttpObserver` callbacks where applicable. `test/integration/ohttp_pipeline_test.dart` now covers 7 end-to-end scenarios.
+- No production code changed; no new dependencies added.
+
 ### AW-2953 Phase 3 — End-to-end integration tests
 
 - Added `test/integration/ohttp_pipeline_test.dart` with two end-to-end integration tests: a happy-path full round-trip (KeyConfig discovery → HPKE encapsulation → gateway POST → real KEM Decap in the stub → decapsulation → BHTTP parse; asserts `statusCode 200`, body, and observer flags) and a cache-hit test (second `send()` within TTL issues exactly one GET to the keys endpoint; asserts `observer.keyConfigCacheHit`).

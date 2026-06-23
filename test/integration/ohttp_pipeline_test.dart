@@ -191,5 +191,174 @@ void main() {
       expect(keysGetCount, 1, reason: 'second send within TTL must not re-fetch keysUrl');
       expect(observer.keyConfigCacheHit, isTrue, reason: 'onKeyConfigCacheHit must fire on second send');
     });
+
+    // -----------------------------------------------------------------------
+    // Failure-path tests (phase 4)
+    // -----------------------------------------------------------------------
+
+    test('gateway 503 throws OhttpGatewayException and invalidates the cache', () async {
+      final keyConfigBytes = multiSuiteKeyConfig(
+        publicKey: gatewayPublicKeyBytes,
+        suiteIds: [(0x0001, 0x0001)],
+      );
+      var keysGetCount = 0;
+      final mockClient = MockClient((request) async {
+        if (request.method == 'GET' && request.url.toString() == _keysUrl) {
+          keysGetCount++;
+
+          return Response.bytes(keyConfigBytes, 200);
+        }
+
+        return Response('', 503);
+      });
+      final observer = _TestObserver();
+      final transport = HttpClientTransport.insecureForTesting(
+        client: mockClient,
+        keysUrl: Uri.parse(_keysUrl),
+        gatewayUrl: Uri.parse(_gatewayUrl),
+      );
+      final client = OhttpHttpClient(
+        session: OhttpSession.withTransport(transport: transport, observer: observer),
+      );
+
+      // First send → OhttpGatewayException; cache must be invalidated.
+      await expectLater(
+        client.send(Request('GET', Uri.parse('https://example.com/'))),
+        throwsA(isA<OhttpGatewayException>().having((e) => e.statusCode, 'statusCode', 503)),
+      );
+      expect(keysGetCount, 1);
+      expect(observer.gatewayError, isTrue);
+      expect(observer.cacheInvalidated, isTrue);
+
+      // Second send → must re-fetch keysUrl because the cache was invalidated.
+      await expectLater(
+        client.send(Request('GET', Uri.parse('https://example.com/'))),
+        throwsA(isA<OhttpGatewayException>()),
+      );
+      expect(keysGetCount, 2, reason: 'cache invalidation must trigger a second GET to keysUrl');
+    });
+
+    test('flipped ciphertext byte throws OhttpCryptoException', () async {
+      final keyConfigBytes = multiSuiteKeyConfig(
+        publicKey: gatewayPublicKeyBytes,
+        suiteIds: [(0x0001, 0x0001)],
+      );
+      final mockClient = _buildMockClient(
+        keyConfigBytes: keyConfigBytes,
+        gatewayHandler: (request) async {
+          final postBody = request.bodyBytes;
+          final exportedSecret = await decapExportedSecret(postBody);
+          final enc = Uint8List.fromList(postBody.sublist(7, 7 + CipherSuite.kemPublicKeyLength));
+          final bhttpResponseBytes = _buildBhttpResponse(utf8.encode('ok'));
+          final sealed = await sealBhttpResponse(enc, exportedSecret, bhttpResponseBytes);
+          // XOR the first ciphertext byte (immediately after the 16-byte response_nonce)
+          // to produce an AEAD authentication failure.
+          sealed[responseNonceLen] ^= 0xFF;
+
+          return Response.bytes(sealed, 200);
+        },
+      );
+      final observer = _TestObserver();
+      final transport = HttpClientTransport.insecureForTesting(
+        client: mockClient,
+        keysUrl: Uri.parse(_keysUrl),
+        gatewayUrl: Uri.parse(_gatewayUrl),
+      );
+      final client = OhttpHttpClient(
+        session: OhttpSession.withTransport(transport: transport, observer: observer),
+      );
+
+      await expectLater(
+        client.send(Request('GET', Uri.parse('https://example.com/'))),
+        throwsA(isA<OhttpCryptoException>()),
+      );
+      expect(observer.decapsulationError, isTrue);
+    });
+
+    test('truncated response body throws OhttpDecapsulationException', () async {
+      final keyConfigBytes = multiSuiteKeyConfig(
+        publicKey: gatewayPublicKeyBytes,
+        suiteIds: [(0x0001, 0x0001)],
+      );
+      // 8 bytes is fewer than responseNonceLen (16), so ohttpDecapsulate
+      // must reject it as too short before attempting any AEAD operation.
+      final mockClient = _buildMockClient(
+        keyConfigBytes: keyConfigBytes,
+        gatewayHandler: (request) async => Response.bytes(Uint8List(8), 200),
+      );
+      final observer = _TestObserver();
+      final transport = HttpClientTransport.insecureForTesting(
+        client: mockClient,
+        keysUrl: Uri.parse(_keysUrl),
+        gatewayUrl: Uri.parse(_gatewayUrl),
+      );
+      final client = OhttpHttpClient(
+        session: OhttpSession.withTransport(transport: transport, observer: observer),
+      );
+
+      await expectLater(
+        client.send(Request('GET', Uri.parse('https://example.com/'))),
+        throwsA(isA<OhttpDecapsulationException>()),
+      );
+      expect(observer.decapsulationError, isTrue);
+    });
+
+    test('gateway POST delay exceeds timeout throws OhttpTimeoutException', () async {
+      final keyConfigBytes = multiSuiteKeyConfig(
+        publicKey: gatewayPublicKeyBytes,
+        suiteIds: [(0x0001, 0x0001)],
+      );
+      // Gateway delays 2 s — 20× the 100 ms transport timeout — to absorb CI variance.
+      final mockClient = _buildMockClient(
+        keyConfigBytes: keyConfigBytes,
+        gatewayHandler: (request) async {
+          await Future<void>.delayed(const Duration(seconds: 2));
+
+          return Response('', 200);
+        },
+      );
+      final transport = HttpClientTransport.insecureForTesting(
+        client: mockClient,
+        keysUrl: Uri.parse(_keysUrl),
+        gatewayUrl: Uri.parse(_gatewayUrl),
+        postToGatewayTimeout: const Duration(milliseconds: 100),
+      );
+      final client = OhttpHttpClient(
+        session: OhttpSession.withTransport(transport: transport),
+      );
+
+      await expectLater(
+        client.send(Request('GET', Uri.parse('https://example.com/'))),
+        throwsA(isA<OhttpTimeoutException>()),
+      );
+    });
+
+    test('response body over size cap throws OhttpSizeLimitException', () async {
+      final keyConfigBytes = multiSuiteKeyConfig(
+        publicKey: gatewayPublicKeyBytes,
+        suiteIds: [(0x0001, 0x0001)],
+      );
+      // 512-byte body exceeds the 64-byte cap; size check fires before decapsulation.
+      final mockClient = _buildMockClient(
+        keyConfigBytes: keyConfigBytes,
+        gatewayHandler: (request) async => Response.bytes(Uint8List(512), 200),
+      );
+      final transport = HttpClientTransport.insecureForTesting(
+        client: mockClient,
+        keysUrl: Uri.parse(_keysUrl),
+        gatewayUrl: Uri.parse(_gatewayUrl),
+      );
+      final client = OhttpHttpClient(
+        session: OhttpSession.withTransport(
+          transport: transport,
+          maxEncryptedResponseBytes: 64,
+        ),
+      );
+
+      await expectLater(
+        client.send(Request('GET', Uri.parse('https://example.com/'))),
+        throwsA(isA<OhttpSizeLimitException>()),
+      );
+    });
   });
 }
