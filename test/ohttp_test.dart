@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
@@ -6,14 +5,10 @@ import 'package:ohttp_dart/ohttp_dart.dart';
 import 'package:ohttp_dart/src/cipher_suite.dart';
 import 'package:test/test.dart';
 
+import 'support/gateway_stub.dart';
 import 'test_utils.dart';
 
 void main() {
-  // Response nonce length per RFC 9458 §4.6.2: max(Nn, Nk).
-  const responseNonceLen = CipherSuite.aeadKeyLength > CipherSuite.aeadNonceLength
-      ? CipherSuite.aeadKeyLength
-      : CipherSuite.aeadNonceLength;
-
   group('OhttpKeyConfig.parse', () {
     test('parses valid 41-byte config', () {
       final buf = BytesBuilder();
@@ -372,121 +367,49 @@ void main() {
 
   group('OHTTP encapsulate / decapsulate roundtrip (RFC 9458 §4.3, §4.4)', () {
     test('decrypts to original response after simulated gateway encryption', () async {
-      // 1. Generate gateway key pair.
-      final gatewayKp = await X25519().newKeyPair();
-      final gatewayPk = await gatewayKp.extractPublicKey();
-      final config = OhttpKeyConfig(
-        keyId: 0x01,
-        kemId: 0x0020,
-        publicKey: Uint8List.fromList(gatewayPk.bytes),
-        kdfId: 0x0001,
-        aeadId: 0x0001,
-      );
+      // 1. Build the fixed gateway key config.
+      final config = buildGatewayKeyConfig();
 
       // 2. Client: encapsulate a binary BHTTP request.
       final binaryRequest = Uint8List.fromList([10, 20, 30, 40, 50]);
       final result = await ohttpEncapsulate(config, binaryRequest);
 
-      // 3. Gateway: derive response key material per RFC 9458 §4.6.2.
-      //    response_nonce has length max(Nn, Nk) = max(12, 16) = 16.
-      //    Use zero-filled nonce for determinism; a real gateway uses random bytes.
-      final responseNonce = Uint8List(responseNonceLen);
-
-      // salt = enc || response_nonce
-      final salt = Uint8List.fromList([...result.enc.bytes, ...responseNonce]);
-
-      // prk = HKDF-Extract(salt, exported_secret)
-      final prk = await HpkeSender.hkdfExtract(salt, result.exportedSecret.bytes);
-
-      // key = HKDF-Expand(prk, "key", Nk)
-      final responseKey = await HpkeSender.hkdfExpand(
-        prk,
-        Uint8List.fromList(utf8.encode('key')),
-        CipherSuite.aeadKeyLength,
-      );
-
-      // nonce = HKDF-Expand(prk, "nonce", Nn)
-      final responseAeadNonce = await HpkeSender.hkdfExpand(
-        prk,
-        Uint8List.fromList(utf8.encode('nonce')),
-        CipherSuite.aeadNonceLength,
-      );
-
-      // 4. Gateway: AES-128-GCM encrypt the BHTTP response with empty AAD.
+      // 3. Gateway: seal a BHTTP response per RFC 9458 §4.6.2.
       final binaryResponse = Uint8List.fromList([100, 101, 102, 103, 104]);
-      final secretBox = await AesGcm.with128bits().encrypt(
+      final encResponse = await sealBhttpResponse(
+        result.enc.bytes,
+        result.exportedSecret.bytes,
         binaryResponse,
-        secretKey: SecretKeyData(responseKey),
-        nonce: responseAeadNonce,
-        aad: [],
       );
 
-      // encResponse = response_nonce || ciphertext || tag
-      final encResponse = Uint8List.fromList([
-        ...responseNonce,
-        ...secretBox.cipherText,
-        ...secretBox.mac.bytes,
-      ]);
-
-      // 5. Client: decapsulate the gateway's encrypted response.
+      // 4. Client: decapsulate the gateway's encrypted response.
       final decrypted = await ohttpDecapsulate(
         result.enc.bytes,
         result.exportedSecret.bytes,
         encResponse,
       );
 
-      // 6. Verify the recovered plaintext equals the original BHTTP response.
+      // 5. Verify the recovered plaintext equals the original BHTTP response.
       expect(decrypted, equals(binaryResponse));
 
       result.dispose();
     });
 
     test('decapsulates empty response payload to empty list', () async {
-      // 1. Generate gateway key pair and build a key config.
-      final gatewayKp = await X25519().newKeyPair();
-      final gatewayPk = await gatewayKp.extractPublicKey();
-      final config = OhttpKeyConfig(
-        keyId: 0x01,
-        kemId: 0x0020,
-        publicKey: Uint8List.fromList(gatewayPk.bytes),
-        kdfId: 0x0001,
-        aeadId: 0x0001,
-      );
+      // 1. Build the fixed gateway key config.
+      final config = buildGatewayKeyConfig();
 
       // 2. Client: encapsulate an empty binary BHTTP request.
       final result = await ohttpEncapsulate(config, Uint8List(0));
 
-      // 3. Gateway: derive response key material per RFC 9458 §4.6.2.
-      final responseNonce = Uint8List(responseNonceLen);
-      final salt = Uint8List.fromList([...result.enc.bytes, ...responseNonce]);
-      final prk = await HpkeSender.hkdfExtract(salt, result.exportedSecret.bytes);
-      final responseKey = await HpkeSender.hkdfExpand(
-        prk,
-        Uint8List.fromList(utf8.encode('key')),
-        CipherSuite.aeadKeyLength,
-      );
-      final responseAeadNonce = await HpkeSender.hkdfExpand(
-        prk,
-        Uint8List.fromList(utf8.encode('nonce')),
-        CipherSuite.aeadNonceLength,
-      );
-
-      // 4. Gateway: AES-128-GCM encrypt an empty response body (only tag remains).
-      final secretBox = await AesGcm.with128bits().encrypt(
+      // 3. Gateway: seal an empty BHTTP response per RFC 9458 §4.6.2.
+      final encResponse = await sealBhttpResponse(
+        result.enc.bytes,
+        result.exportedSecret.bytes,
         Uint8List(0),
-        secretKey: SecretKeyData(responseKey),
-        nonce: responseAeadNonce,
-        aad: [],
       );
 
-      // encResponse = response_nonce || tag (no ciphertext bytes)
-      final encResponse = Uint8List.fromList([
-        ...responseNonce,
-        ...secretBox.cipherText,
-        ...secretBox.mac.bytes,
-      ]);
-
-      // 5. Client: decapsulate — result must be an empty list.
+      // 4. Client: decapsulate — result must be an empty list.
       final decrypted = await ohttpDecapsulate(
         result.enc.bytes,
         result.exportedSecret.bytes,
@@ -499,55 +422,26 @@ void main() {
     });
 
     test('throws OhttpCryptoException when one ciphertext byte is flipped (AEAD auth failure)', () async {
-      // 1. Generate gateway key pair and build a key config.
-      final gatewayKp = await X25519().newKeyPair();
-      final gatewayPk = await gatewayKp.extractPublicKey();
-      final config = OhttpKeyConfig(
-        keyId: 0x01,
-        kemId: 0x0020,
-        publicKey: Uint8List.fromList(gatewayPk.bytes),
-        kdfId: 0x0001,
-        aeadId: 0x0001,
-      );
+      // 1. Build the fixed gateway key config.
+      final config = buildGatewayKeyConfig();
 
       // 2. Client: encapsulate a binary BHTTP request.
       final binaryRequest = Uint8List.fromList([10, 20, 30, 40, 50]);
       final result = await ohttpEncapsulate(config, binaryRequest);
 
-      // 3. Gateway: derive response key material per RFC 9458 §4.6.2.
-      final responseNonce = Uint8List(responseNonceLen);
-      final salt = Uint8List.fromList([...result.enc.bytes, ...responseNonce]);
-      final prk = await HpkeSender.hkdfExtract(salt, result.exportedSecret.bytes);
-      final responseKey = await HpkeSender.hkdfExpand(
-        prk,
-        Uint8List.fromList(utf8.encode('key')),
-        CipherSuite.aeadKeyLength,
-      );
-      final responseAeadNonce = await HpkeSender.hkdfExpand(
-        prk,
-        Uint8List.fromList(utf8.encode('nonce')),
-        CipherSuite.aeadNonceLength,
-      );
-
-      // 4. Gateway: AES-128-GCM encrypt the BHTTP response.
+      // 3. Gateway: seal a BHTTP response per RFC 9458 §4.6.2.
       final binaryResponse = Uint8List.fromList([100, 101, 102, 103, 104]);
-      final secretBox = await AesGcm.with128bits().encrypt(
+      final encResponse = await sealBhttpResponse(
+        result.enc.bytes,
+        result.exportedSecret.bytes,
         binaryResponse,
-        secretKey: SecretKeyData(responseKey),
-        nonce: responseAeadNonce,
-        aad: [],
       );
 
-      // 5. Corrupt the first byte of the ciphertext to break AEAD authentication.
+      // 4. Corrupt the first ciphertext byte to break AEAD authentication.
       //    encResponse = response_nonce || ciphertext || tag
-      final encResponse = Uint8List.fromList([
-        ...responseNonce,
-        ...secretBox.cipherText,
-        ...secretBox.mac.bytes,
-      ]);
       encResponse[responseNonceLen] ^= 0xFF; // flip all bits in first ciphertext byte
 
-      // 6. Client: ohttpDecapsulate must detect the tampered ciphertext and throw.
+      // 5. Client: ohttpDecapsulate must detect the tampered ciphertext and throw.
       await expectLater(
         ohttpDecapsulate(result.enc.bytes, result.exportedSecret.bytes, encResponse),
         throwsA(isA<OhttpCryptoException>()),
