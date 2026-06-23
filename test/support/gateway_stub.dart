@@ -87,9 +87,9 @@ const int responseNonceLen = CipherSuite.aeadKeyLength > CipherSuite.aeadNonceLe
     ? CipherSuite.aeadKeyLength
     : CipherSuite.aeadNonceLength;
 
-// OHTTP request header length: key_id(1) + kem_id(2) + kdf_id(2) + aead_id(2) = 7 bytes.
-// Per RFC 9458 §4.3.
-const int _ohttpHeaderLen = 7;
+/// OHTTP request header length: key_id(1) + kem_id(2) + kdf_id(2) + aead_id(2) = 7 bytes.
+/// Per RFC 9458 §4.3.
+const int ohttpHeaderLen = 7;
 
 // KEM suite ID for DHKEM(X25519): "KEM" || I2OSP(0x0020, 2).
 // Per RFC 9180 §5.1.
@@ -176,14 +176,14 @@ Future<Uint8List> sealBhttpResponse(
 /// the value produced by `ohttpEncapsulate` on the sender side.
 Future<Uint8List> decapExportedSecret(Uint8List encRequest) async {
   // Extract enc (ephemeral sender public key) from the encapsulated request.
-  final enc = encRequest.sublist(_ohttpHeaderLen, _ohttpHeaderLen + CipherSuite.kemPublicKeyLength);
+  final enc = encRequest.sublist(ohttpHeaderLen, ohttpHeaderLen + CipherSuite.kemPublicKeyLength);
 
   // Reconstruct the HPKE info string from the 7-byte OHTTP request header.
   // Per RFC 9458 §4.3: info = "message/bhttp request" || 0x00 || header_bytes.
   final info = Uint8List.fromList([
     ...utf8.encode('message/bhttp request'),
     0x00,
-    ...encRequest.sublist(0, _ohttpHeaderLen),
+    ...encRequest.sublist(0, ohttpHeaderLen),
   ]);
 
   // DH(gatewayPrivateKey, enc) — X25519 KEM Decap (RFC 9180 §7.1.2).

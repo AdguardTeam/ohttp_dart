@@ -23,6 +23,7 @@ final class _TestObserver extends OhttpObserver {
   bool keyConfigCacheHit = false;
   bool postToGateway = false;
   bool gatewayError = false;
+  int? lastGatewayErrorStatus;
   bool cacheInvalidated = false;
   bool decapsulationError = false;
   bool encapsulationError = false;
@@ -37,7 +38,10 @@ final class _TestObserver extends OhttpObserver {
   void onPostToGateway() => postToGateway = true;
 
   @override
-  void onGatewayError(int statusCode) => gatewayError = true;
+  void onGatewayError(int statusCode) {
+    gatewayError = true;
+    lastGatewayErrorStatus = statusCode;
+  }
 
   @override
   void onCacheInvalidated() => cacheInvalidated = true;
@@ -101,7 +105,7 @@ Uint8List _buildBhttpResponse(List<int> body) {
 Future<Response> _gatewayHandlerFor(Request request, Uint8List bhttpResponseBytes) async {
   final postBody = request.bodyBytes;
   final exportedSecret = await decapExportedSecret(postBody);
-  final enc = Uint8List.fromList(postBody.sublist(7, 7 + CipherSuite.kemPublicKeyLength));
+  final enc = postBody.sublist(ohttpHeaderLen, ohttpHeaderLen + CipherSuite.kemPublicKeyLength);
   final encResponse = await sealBhttpResponse(enc, exportedSecret, bhttpResponseBytes);
 
   return Response.bytes(encResponse, 200);
@@ -228,6 +232,7 @@ void main() {
       );
       expect(keysGetCount, 1);
       expect(observer.gatewayError, isTrue);
+      expect(observer.lastGatewayErrorStatus, 503);
       expect(observer.cacheInvalidated, isTrue);
 
       // Second send → must re-fetch keysUrl because the cache was invalidated.
@@ -248,7 +253,7 @@ void main() {
         gatewayHandler: (request) async {
           final postBody = request.bodyBytes;
           final exportedSecret = await decapExportedSecret(postBody);
-          final enc = Uint8List.fromList(postBody.sublist(7, 7 + CipherSuite.kemPublicKeyLength));
+          final enc = postBody.sublist(ohttpHeaderLen, ohttpHeaderLen + CipherSuite.kemPublicKeyLength);
           final bhttpResponseBytes = _buildBhttpResponse(utf8.encode('ok'));
           final sealed = await sealBhttpResponse(enc, exportedSecret, bhttpResponseBytes);
           // XOR the first ciphertext byte (immediately after the 16-byte response_nonce)
@@ -357,7 +362,11 @@ void main() {
 
       await expectLater(
         client.send(Request('GET', Uri.parse('https://example.com/'))),
-        throwsA(isA<OhttpSizeLimitException>()),
+        throwsA(
+          isA<OhttpSizeLimitException>()
+              .having((e) => e.limit, 'limit', 64)
+              .having((e) => e.actualSize, 'actualSize', 512),
+        ),
       );
     });
   });

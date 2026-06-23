@@ -1,5 +1,12 @@
 ## Unreleased
 
+### AW-2953 Phase 5 — Final wiring check and code-review fixes
+
+- Exported `ohttpHeaderLen = 7` from `test/support/gateway_stub.dart` with an RFC 9458 §4.3 citation, replacing raw literal `7` in two `sublist` calls in `test/integration/ohttp_pipeline_test.dart`.
+- Extended the size-cap test assertion to verify `OhttpSizeLimitException.limit == 64` and `OhttpSizeLimitException.actualSize == 512`, confirming the exception carries the configured cap and the actual encrypted response length.
+- Full suite gate confirmed: `dart test` (no filter), `dart analyze`, and `dart format . --output=none` all exit 0 with zero warnings across `lib/` and `test/`.
+- No production code changed; no new dependencies added.
+
 ### AW-2953 Phase 4 — Failure-path integration tests
 
 - Added 5 failure-path tests to `test/integration/ohttp_pipeline_test.dart`: gateway 503 (`OhttpGatewayException` with `statusCode == 503` + cache-invalidation verified by a second GET to `keysUrl`), flipped ciphertext byte (`OhttpCryptoException`), truncated response body below `responseNonceLen` (`OhttpDecapsulationException`), gateway POST delay 2 s vs. 100 ms transport timeout (`OhttpTimeoutException`), and 512-byte response body vs. 64-byte cap (`OhttpSizeLimitException`). All five tests use the most-specific shipped exception subtype and assert matching `OhttpObserver` callbacks where applicable. `test/integration/ohttp_pipeline_test.dart` now covers 7 end-to-end scenarios.
