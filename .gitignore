@@ -11,6 +11,7 @@ pubspec.lock
 .agents/
 .claude/
 .github/
+.windsurf/
 .mcp.json
 
 .fvmrc
@@ -20,3 +21,4 @@ pubspec.lock
 .vscode/
 
 skills-lock.json
+specs/

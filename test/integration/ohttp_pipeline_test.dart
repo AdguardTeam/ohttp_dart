@@ -432,5 +432,35 @@ void main() {
         ),
       );
     });
+
+    test('unsupported cipher suite in KeyConfig throws OhttpUnsupportedSuiteException', () async {
+      // KeyConfig advertises only kdf=0x0002/aead=0x0002 — no supported suite.
+      // OhttpKeyConfig.parse() throws OhttpUnsupportedSuiteException before
+      // ohttpEncapsulate is ever called, so encapsulationError is not set.
+      final keyConfigBytes = multiSuiteKeyConfig(
+        publicKey: gatewayPublicKeyBytes,
+        suiteIds: [(0x0002, 0x0002)],
+      );
+      final mockClient = _buildMockClient(
+        keyConfigBytes: keyConfigBytes,
+        gatewayHandler: (request) async => Response('', 200),
+      );
+      final transport = HttpClientTransport.insecureForTesting(
+        client: mockClient,
+        keysUrl: Uri.parse(_keysUrl),
+        gatewayUrl: Uri.parse(_gatewayUrl),
+      );
+      final observer = _TestObserver();
+      final client = OhttpHttpClient(
+        session: OhttpSession.withTransport(transport: transport, observer: observer),
+      );
+
+      await expectLater(
+        client.send(Request('GET', Uri.parse('https://example.com/'))),
+        throwsA(isA<OhttpUnsupportedSuiteException>()),
+      );
+      expect(observer.encapsulationError, isFalse);
+      expect(observer.postToGateway, isFalse);
+    });
   });
 }
