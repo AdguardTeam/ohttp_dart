@@ -21,8 +21,8 @@ Eight end-to-end tests exercise the complete OHTTP pipeline:
 | Header round-trip | Same pipeline with a BHTTP response carrying a `content-type` header; asserts the header survives decapsulation into `response.headers` |
 | Cache-hit within TTL | Two sequential `send()` calls on the same client; asserts exactly one GET to `keysUrl` and `observer.keyConfigCacheHit` fires on the second call |
 | Gateway 503 (cache invalidated) | `OhttpGatewayException(statusCode: 503)`; observer `gatewayError = true`; `cacheInvalidated = true`; second key-config fetch on retry |
-| Flipped ciphertext byte | `OhttpDecapsulationException` thrown when one AEAD ciphertext byte is flipped |
-| Truncated response body | `OhttpFormatException` or `OhttpSizeLimitException` when the encrypted payload is shorter than expected |
+| Flipped ciphertext byte | `OhttpCryptoException` thrown when one AEAD ciphertext byte is flipped |
+| Truncated response body | `OhttpDecapsulationException` when the encrypted payload is shorter than `responseNonceLen` (16 bytes) and is rejected before decryption |
 | Gateway POST timeout | `OhttpTimeoutException` when the mock gateway delays beyond the session timeout |
 | Response over size cap | `OhttpSizeLimitException` with correct `limit` and `actualSize` when the encrypted response exceeds `maxEncryptedResponseBytes` |
 
@@ -41,7 +41,7 @@ Three `kiri_check` property tests run with a fixed CI seed for reproducibility:
 Each `forAll()` call uses `seed: 42`. To run with a different seed, edit the `seed:` argument on each `forAll()` call in `fuzz_test.dart`. For a deeper periodic run, add a `maxExamples:` argument to each `forAll(...)` call and increase the `binary(maxLength:)` bound as needed:
 
 ```bash
-dart test test/integration/fuzz_test.dart
-dart test test/integration/ohttp_pipeline_test.dart
-dart test test/integration/  # run all integration tests
+fvm dart test test/integration/fuzz_test.dart
+fvm dart test test/integration/ohttp_pipeline_test.dart
+fvm dart test test/integration/  # run all integration tests
 ```
