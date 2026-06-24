@@ -13,12 +13,18 @@ Because the normal `HttpClientTransport` constructor rejects `http://` URLs, the
 
 ## Pipeline tests (`ohttp_pipeline_test.dart`)
 
-Two end-to-end tests exercise the complete OHTTP pipeline:
+Eight end-to-end tests exercise the complete OHTTP pipeline:
 
 | Test | What it checks |
 |------|----------------|
 | Happy-path full round-trip | KeyConfig discovery → HPKE encapsulation → gateway POST → real KEM Decap in stub → decapsulation → BHTTP parse; asserts `statusCode 200`, decoded body, and observer event flags |
+| Header round-trip | Same pipeline with a BHTTP response carrying a `content-type` header; asserts the header survives decapsulation into `response.headers` |
 | Cache-hit within TTL | Two sequential `send()` calls on the same client; asserts exactly one GET to `keysUrl` and `observer.keyConfigCacheHit` fires on the second call |
+| Gateway 503 (cache invalidated) | `OhttpGatewayException(statusCode: 503)`; observer `gatewayError = true`; `cacheInvalidated = true`; second key-config fetch on retry |
+| Flipped ciphertext byte | `OhttpDecapsulationException` thrown when one AEAD ciphertext byte is flipped |
+| Truncated response body | `OhttpFormatException` or `OhttpSizeLimitException` when the encrypted payload is shorter than expected |
+| Gateway POST timeout | `OhttpTimeoutException` when the mock gateway delays beyond the session timeout |
+| Response over size cap | `OhttpSizeLimitException` with correct `limit` and `actualSize` when the encrypted response exceeds `maxEncryptedResponseBytes` |
 
 ## Property / fuzz tests (`fuzz_test.dart`)
 
@@ -32,7 +38,7 @@ Three `kiri_check` property tests run with a fixed CI seed for reproducibility:
 
 ### Overriding the seed for deeper runs
 
-Each `forAll()` call uses `seed: 42`. To run with a different seed, edit the `seed:` argument on each `forAll()` call in `fuzz_test.dart`. For a deeper periodic run, also increase `maxExamples` and the `binary(maxLength:)` bound as needed:
+Each `forAll()` call uses `seed: 42`. To run with a different seed, edit the `seed:` argument on each `forAll()` call in `fuzz_test.dart`. For a deeper periodic run, add a `maxExamples:` argument to each `forAll(...)` call and increase the `binary(maxLength:)` bound as needed:
 
 ```bash
 dart test test/integration/fuzz_test.dart

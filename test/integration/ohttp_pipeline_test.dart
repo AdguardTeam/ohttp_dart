@@ -23,10 +23,10 @@ final class _TestObserver extends OhttpObserver {
   bool keyConfigCacheHit = false;
   bool postToGateway = false;
   bool gatewayError = false;
-  int? lastGatewayErrorStatus;
   bool cacheInvalidated = false;
   bool decapsulationError = false;
   bool encapsulationError = false;
+  int? lastGatewayErrorStatus;
 
   @override
   void onKeyConfigFetched() => keyConfigFetched = true;
@@ -98,6 +98,33 @@ Uint8List _buildBhttpResponse(List<int> body) {
   return Uint8List.fromList(buf.toBytes());
 }
 
+// Builds a Known-Length 200 BHTTP response (RFC 9292 §3.2) with named headers.
+// Each field line: nameLen(varint) || name || valueLen(varint) || value.
+Uint8List _buildBhttpResponseWithHeaders(List<int> body, List<(String, String)> headers) {
+  final headerBuf = BytesBuilder();
+  for (final (name, value) in headers) {
+    final nameBytes = utf8.encode(name);
+    final valueBytes = utf8.encode(value);
+    headerBuf
+      ..add(encodeVarint(nameBytes.length))
+      ..add(nameBytes)
+      ..add(encodeVarint(valueBytes.length))
+      ..add(valueBytes);
+  }
+  final headerBytes = headerBuf.toBytes();
+
+  final buf = BytesBuilder()
+    ..add(encodeVarint(1)) // framing indicator
+    ..add(encodeVarint(200)) // status code
+    ..add(encodeVarint(headerBytes.length))
+    ..add(headerBytes)
+    ..add(encodeVarint(body.length))
+    ..add(body)
+    ..add(encodeVarint(0)); // trailer section length = 0
+
+  return Uint8List.fromList(buf.toBytes());
+}
+
 // ---------------------------------------------------------------------------
 // Shared gateway handler — KEM decap + seal canned BHTTP response.
 // ---------------------------------------------------------------------------
@@ -152,6 +179,42 @@ void main() {
       expect(observer.gatewayError, isFalse);
       expect(observer.decapsulationError, isFalse);
       expect(observer.encapsulationError, isFalse);
+    });
+
+    test('happy path: response headers survive the HPKE + BHTTP round trip', () async {
+      final keyConfigBytes = multiSuiteKeyConfig(
+        publicKey: gatewayPublicKeyBytes,
+        suiteIds: [(0x0001, 0x0001)],
+      );
+      final bhttpResponseBytes = _buildBhttpResponseWithHeaders(
+        utf8.encode('hello'),
+        [('content-type', 'text/plain')],
+      );
+
+      final mockClient = _buildMockClient(
+        keyConfigBytes: keyConfigBytes,
+        gatewayHandler: (req) => _gatewayHandlerFor(req, bhttpResponseBytes),
+      );
+
+      final transport = HttpClientTransport.insecureForTesting(
+        client: mockClient,
+        keysUrl: Uri.parse(_keysUrl),
+        gatewayUrl: Uri.parse(_gatewayUrl),
+      );
+      final client = OhttpHttpClient(
+        session: OhttpSession.withTransport(transport: transport),
+      );
+
+      final response = await client.send(Request('GET', Uri.parse('https://example.com/resource')));
+      final body = await response.stream.toBytes();
+
+      expect(response.statusCode, 200);
+      expect(utf8.decode(body), 'hello');
+      expect(
+        response.headers['content-type'],
+        'text/plain',
+        reason: 'response headers must survive BHTTP decapsulation',
+      );
     });
 
     test('cache hit: second send within TTL issues only one GET to keysUrl', () async {

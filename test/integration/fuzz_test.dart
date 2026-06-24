@@ -20,11 +20,10 @@ void main() {
       );
     });
 
-    // parseResponse is safe on arbitrary bytes: the outer catch blocks in
-    // bhttp.dart (on FormatException at line 256, on RangeError at line 261)
-    // both rethrow as OhttpFormatException, and OhttpSizeLimitException is
-    // thrown inside the same try block and propagates unchanged. No other
-    // exception type can escape the function.
+    // parseResponse is safe on arbitrary bytes: its outer body is wrapped with
+    // `on FormatException` and `on RangeError` catch arms that rethrow as
+    // OhttpFormatException; OhttpSizeLimitException is raised inside the same
+    // try block and propagates unchanged. No other exception type can escape.
     property(
       'parseResponse on random bytes only throws OhttpFormatException or OhttpSizeLimitException',
       () {
