@@ -15,6 +15,14 @@ void main() {
           final encoded = encodeVarint(v);
           final (decoded, _) = decodeVarint(encoded, 0);
           expect(decoded, equals(v));
+          // RFC 9000 §16 defines four ranges with fixed byte widths.
+          final expectedLen = switch (v) {
+            < 0x40 => 1,
+            < 0x4000 => 2,
+            < 0x40000000 => 4,
+            _ => 8,
+          };
+          expect(encoded.length, equals(expectedLen));
         },
         seed: 42,
       );
