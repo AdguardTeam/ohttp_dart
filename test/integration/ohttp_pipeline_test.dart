@@ -27,6 +27,8 @@ final class _TestObserver extends OhttpObserver {
   bool decapsulationError = false;
   bool encapsulationError = false;
   int? lastGatewayErrorStatus;
+  Type? lastDecapsulationErrorType;
+  Type? lastEncapsulationErrorType;
 
   @override
   void onKeyConfigFetched() => keyConfigFetched = true;
@@ -47,10 +49,16 @@ final class _TestObserver extends OhttpObserver {
   void onCacheInvalidated() => cacheInvalidated = true;
 
   @override
-  void onDecapsulationError(Type errorType) => decapsulationError = true;
+  void onDecapsulationError(Type errorType) {
+    decapsulationError = true;
+    lastDecapsulationErrorType = errorType;
+  }
 
   @override
-  void onEncapsulationError(Type errorType) => encapsulationError = true;
+  void onEncapsulationError(Type errorType) {
+    encapsulationError = true;
+    lastEncapsulationErrorType = errorType;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -138,6 +146,13 @@ Future<Response> _gatewayHandlerFor(Request request, Uint8List bhttpResponseByte
   return Response.bytes(encResponse, 200);
 }
 
+// Shorthand for the default KeyConfig used by 9 of 10 tests:
+// DHKEM(X25519) + HKDF-SHA256 + AES-128-GCM against the fixed gateway key.
+Uint8List _defaultKeyConfigBytes() => multiSuiteKeyConfig(
+  publicKey: gatewayPublicKeyBytes,
+  suiteIds: [(0x0001, 0x0001)],
+);
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -147,10 +162,7 @@ void main() {
     test('happy path: full round-trip decrypts canned BHTTP response', () async {
       // Use the fixed gateway public key so the sender's ohttpEncapsulate produces
       // an enc/exportedSecret the stub can re-derive via KEM decap.
-      final keyConfigBytes = multiSuiteKeyConfig(
-        publicKey: gatewayPublicKeyBytes,
-        suiteIds: [(0x0001, 0x0001)],
-      );
+      final keyConfigBytes = _defaultKeyConfigBytes();
       final bhttpResponseBytes = _buildBhttpResponse(utf8.encode('hello'));
 
       final mockClient = _buildMockClient(
@@ -182,10 +194,7 @@ void main() {
     });
 
     test('happy path: response headers survive the HPKE + BHTTP round trip', () async {
-      final keyConfigBytes = multiSuiteKeyConfig(
-        publicKey: gatewayPublicKeyBytes,
-        suiteIds: [(0x0001, 0x0001)],
-      );
+      final keyConfigBytes = _defaultKeyConfigBytes();
       final bhttpResponseBytes = _buildBhttpResponseWithHeaders(
         utf8.encode('hello'),
         [('content-type', 'text/plain')],
@@ -217,11 +226,57 @@ void main() {
       );
     });
 
-    test('cache hit: second send within TTL issues only one GET to keysUrl', () async {
-      final keyConfigBytes = multiSuiteKeyConfig(
-        publicKey: gatewayPublicKeyBytes,
-        suiteIds: [(0x0001, 0x0001)],
+    test('happy path: request headers and body survive HPKE + BHTTP encapsulation', () async {
+      // Verifies that the client serialises outbound headers into the BHTTP
+      // request before encapsulation: openEncapsulatedRequest decrypts the
+      // inner ciphertext and the custom header bytes must be present.
+      final keyConfigBytes = _defaultKeyConfigBytes();
+      Uint8List? decryptedBhttp;
+
+      final bhttpResponseBytes = _buildBhttpResponse(utf8.encode('ok'));
+      final mockClient = _buildMockClient(
+        keyConfigBytes: keyConfigBytes,
+        gatewayHandler: (request) async {
+          final postBody = request.bodyBytes;
+          decryptedBhttp = await openEncapsulatedRequest(postBody);
+          // Still seal a valid response so client.send() completes normally.
+
+          return _gatewayHandlerFor(request, bhttpResponseBytes);
+        },
       );
+
+      final transport = HttpClientTransport.insecureForTesting(
+        client: mockClient,
+        keysUrl: Uri.parse(_keysUrl),
+        gatewayUrl: Uri.parse(_gatewayUrl),
+      );
+      final client = OhttpHttpClient(
+        session: OhttpSession.withTransport(transport: transport),
+      );
+
+      final outboundRequest = Request('GET', Uri.parse('https://example.com/resource'));
+      outboundRequest.headers['x-request-id'] = 'test-42';
+      final response = await client.send(outboundRequest);
+      await response.stream.drain<void>();
+
+      expect(response.statusCode, 200);
+      // BHTTP field names/values are written as raw ASCII bytes; String.fromCharCodes
+      // lets us assert both are present without a full BHTTP parser.
+      final bhttpStr = String.fromCharCodes(decryptedBhttp!);
+      expect(
+        bhttpStr,
+        contains('x-request-id'),
+        reason: 'request header name must survive HPKE + BHTTP encapsulation',
+      );
+      expect(
+        bhttpStr,
+        contains('test-42'),
+        reason: 'request header value must survive HPKE + BHTTP encapsulation',
+      );
+    });
+
+    test('cache hit: second send within TTL issues only one GET to keysUrl', () async {
+      final keyConfigBytes = _defaultKeyConfigBytes();
       final bhttpResponseBytes = _buildBhttpResponse(utf8.encode('hi'));
       var keysGetCount = 0;
 
@@ -264,10 +319,7 @@ void main() {
     // -----------------------------------------------------------------------
 
     test('gateway 503 throws OhttpGatewayException and invalidates the cache', () async {
-      final keyConfigBytes = multiSuiteKeyConfig(
-        publicKey: gatewayPublicKeyBytes,
-        suiteIds: [(0x0001, 0x0001)],
-      );
+      final keyConfigBytes = _defaultKeyConfigBytes();
       var keysGetCount = 0;
       final mockClient = MockClient((request) async {
         if (request.method == 'GET' && request.url.toString() == _keysUrl) {
@@ -307,10 +359,7 @@ void main() {
     });
 
     test('flipped ciphertext byte throws OhttpCryptoException', () async {
-      final keyConfigBytes = multiSuiteKeyConfig(
-        publicKey: gatewayPublicKeyBytes,
-        suiteIds: [(0x0001, 0x0001)],
-      );
+      final keyConfigBytes = _defaultKeyConfigBytes();
       final mockClient = _buildMockClient(
         keyConfigBytes: keyConfigBytes,
         gatewayHandler: (request) async {
@@ -341,13 +390,11 @@ void main() {
         throwsA(isA<OhttpCryptoException>()),
       );
       expect(observer.decapsulationError, isTrue);
+      expect(observer.lastDecapsulationErrorType, OhttpCryptoException);
     });
 
     test('truncated response body throws OhttpDecapsulationException', () async {
-      final keyConfigBytes = multiSuiteKeyConfig(
-        publicKey: gatewayPublicKeyBytes,
-        suiteIds: [(0x0001, 0x0001)],
-      );
+      final keyConfigBytes = _defaultKeyConfigBytes();
       // 8 bytes is fewer than responseNonceLen (16), so ohttpDecapsulate
       // must reject it as too short before attempting any AEAD operation.
       final mockClient = _buildMockClient(
@@ -372,10 +419,7 @@ void main() {
     });
 
     test('gateway POST delay exceeds timeout throws OhttpTimeoutException', () async {
-      final keyConfigBytes = multiSuiteKeyConfig(
-        publicKey: gatewayPublicKeyBytes,
-        suiteIds: [(0x0001, 0x0001)],
-      );
+      final keyConfigBytes = _defaultKeyConfigBytes();
       // Gateway delays 2 s — 20× the 100 ms transport timeout — to absorb CI variance.
       final mockClient = _buildMockClient(
         keyConfigBytes: keyConfigBytes,
@@ -402,10 +446,7 @@ void main() {
     });
 
     test('response body over size cap throws OhttpSizeLimitException', () async {
-      final keyConfigBytes = multiSuiteKeyConfig(
-        publicKey: gatewayPublicKeyBytes,
-        suiteIds: [(0x0001, 0x0001)],
-      );
+      final keyConfigBytes = _defaultKeyConfigBytes();
       // 512-byte body exceeds the 64-byte cap; size check fires before decapsulation.
       final mockClient = _buildMockClient(
         keyConfigBytes: keyConfigBytes,
@@ -434,10 +475,7 @@ void main() {
     });
 
     test('decrypted body over maxBodyBytes limit throws OhttpSizeLimitException', () async {
-      final keyConfigBytes = multiSuiteKeyConfig(
-        publicKey: gatewayPublicKeyBytes,
-        suiteIds: [(0x0001, 0x0001)],
-      );
+      final keyConfigBytes = _defaultKeyConfigBytes();
       // 100-byte BHTTP body; limit set to 50 — layer-2 check fires after HPKE decryption.
       final bhttpResponseBytes = _buildBhttpResponse(Uint8List(100));
 

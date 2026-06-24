@@ -174,6 +174,10 @@ Future<Uint8List> sealBhttpResponse(
 ///
 /// Returns the exported secret that [sealBhttpResponse] expects, matching
 /// the value produced by `ohttpEncapsulate` on the sender side.
+///
+/// Mirrors `lib/src/hpke.dart` (HpkeSender / ohttpEncapsulate) and
+/// `lib/src/cipher_suite.dart` — update if the production cipher suite or
+/// export context changes.
 Future<Uint8List> decapExportedSecret(Uint8List encRequest) async {
   // Extract enc (ephemeral sender public key) from the encapsulated request.
   final enc = encRequest.sublist(ohttpHeaderLen, ohttpHeaderLen + CipherSuite.kemPublicKeyLength);
@@ -233,6 +237,99 @@ Future<Uint8List> decapExportedSecret(Uint8List encRequest) async {
     Uint8List.fromList(utf8.encode('message/bhttp response')),
     responseNonceLen,
   );
+}
+
+/// Opens an encapsulated OHTTP request and returns the raw BHTTP request bytes.
+///
+/// Runs the same KEM Decap + HPKE key schedule as [decapExportedSecret],
+/// then derives the request AEAD key and nonce per RFC 9180 §5.2 and
+/// decrypts the ciphertext with AES-128-GCM using **empty AAD**
+/// (per RFC 9458 §4.3: `ct = sctxt.Seal("", request)` — the header is
+/// bound through the HPKE info string, not through the AEAD AAD).
+///
+/// Mirrors `lib/src/hpke.dart` (HpkeSender.seal) and
+/// `lib/src/cipher_suite.dart` — update if the production cipher suite changes.
+Future<Uint8List> openEncapsulatedRequest(Uint8List encRequest) async {
+  // Parse layout: header(7) | enc(32) | ciphertext || tag
+  final header = encRequest.sublist(0, ohttpHeaderLen);
+  final enc = encRequest.sublist(ohttpHeaderLen, ohttpHeaderLen + CipherSuite.kemPublicKeyLength);
+  final ctWithTag = encRequest.sublist(ohttpHeaderLen + CipherSuite.kemPublicKeyLength);
+
+  // Reconstruct HPKE info (identical to decapExportedSecret).
+  final info = Uint8List.fromList([
+    ...utf8.encode('message/bhttp request'),
+    0x00,
+    ...header,
+  ]);
+
+  // KEM Decap (identical to decapExportedSecret).
+  final x25519 = X25519();
+  final privKey = SimpleKeyPairData(
+    gatewayPrivateKeyBytes,
+    publicKey: SimplePublicKey(gatewayPublicKeyBytes, type: KeyPairType.x25519),
+    type: KeyPairType.x25519,
+  );
+  final ephPubKey = SimplePublicKey(enc, type: KeyPairType.x25519);
+  final dhResult = await x25519.sharedSecretKey(keyPair: privKey, remotePublicKey: ephPubKey);
+  final dh = Uint8List.fromList(await dhResult.extractBytes());
+
+  final kemContext = Uint8List.fromList([...enc, ...gatewayPublicKeyBytes]);
+  final eaePrk = await _labeledExtract(_kemSuiteId, Uint8List(0), utf8.encode('eae_prk'), dh);
+  final sharedSecret = await _labeledExpand(
+    _kemSuiteId,
+    eaePrk,
+    utf8.encode('shared_secret'),
+    kemContext,
+    CipherSuite.kemSharedSecretLength,
+  );
+
+  // Key schedule — identical to decapExportedSecret, but stopping at `secret`
+  // rather than computing the exporter secret.
+  final pskIdHash = await _labeledExtract(
+    _hpkeSuiteId,
+    Uint8List(0),
+    utf8.encode('psk_id_hash'),
+    Uint8List(0),
+  );
+  final infoHash = await _labeledExtract(
+    _hpkeSuiteId,
+    Uint8List(0),
+    utf8.encode('info_hash'),
+    info,
+  );
+  final ksContext = Uint8List.fromList([0x00, ...pskIdHash, ...infoHash]);
+  final secret = await _labeledExtract(
+    _hpkeSuiteId,
+    sharedSecret,
+    utf8.encode('secret'),
+    Uint8List(0),
+  );
+
+  // Derive request AEAD key and base nonce (RFC 9180 §5.2).
+  final key = await _labeledExpand(
+    _hpkeSuiteId,
+    secret,
+    utf8.encode('key'),
+    ksContext,
+    CipherSuite.aeadKeyLength,
+  );
+  final baseNonce = await _labeledExpand(
+    _hpkeSuiteId,
+    secret,
+    utf8.encode('base_nonce'),
+    ksContext,
+    CipherSuite.aeadNonceLength,
+  );
+
+  // AES-128-GCM decrypt (seq=0, so request nonce = baseNonce; AAD = empty per RFC 9458 §4.3).
+  final cipherText = ctWithTag.sublist(0, ctWithTag.length - CipherSuite.aeadTagLength);
+  final tag = ctWithTag.sublist(ctWithTag.length - CipherSuite.aeadTagLength);
+  final plaintext = await AesGcm.with128bits().decrypt(
+    SecretBox(cipherText, nonce: baseNonce, mac: Mac(tag)),
+    secretKey: SecretKeyData(key),
+  );
+
+  return Uint8List.fromList(plaintext);
 }
 
 // -- Labeled HKDF helpers (mirrors HpkeSender private methods, RFC 9180 §4) --
