@@ -433,6 +433,40 @@ void main() {
       );
     });
 
+    test('decrypted body over maxBodyBytes limit throws OhttpSizeLimitException', () async {
+      final keyConfigBytes = multiSuiteKeyConfig(
+        publicKey: gatewayPublicKeyBytes,
+        suiteIds: [(0x0001, 0x0001)],
+      );
+      // 100-byte BHTTP body; limit set to 50 — layer-2 check fires after HPKE decryption.
+      final bhttpResponseBytes = _buildBhttpResponse(Uint8List(100));
+
+      final mockClient = _buildMockClient(
+        keyConfigBytes: keyConfigBytes,
+        gatewayHandler: (req) => _gatewayHandlerFor(req, bhttpResponseBytes),
+      );
+      final transport = HttpClientTransport.insecureForTesting(
+        client: mockClient,
+        keysUrl: Uri.parse(_keysUrl),
+        gatewayUrl: Uri.parse(_gatewayUrl),
+      );
+      final client = OhttpHttpClient(
+        session: OhttpSession.withTransport(
+          transport: transport,
+          decryptedResponseLimits: const BhttpResponseLimits(maxBodyBytes: 50),
+        ),
+      );
+
+      await expectLater(
+        client.send(Request('GET', Uri.parse('https://example.com/'))),
+        throwsA(
+          isA<OhttpSizeLimitException>()
+              .having((e) => e.limit, 'limit', 50)
+              .having((e) => e.actualSize, 'actualSize', 100),
+        ),
+      );
+    });
+
     test('unsupported cipher suite in KeyConfig throws OhttpUnsupportedSuiteException', () async {
       // KeyConfig advertises only kdf=0x0002/aead=0x0002 — no supported suite.
       // OhttpKeyConfig.parse() throws OhttpUnsupportedSuiteException before
