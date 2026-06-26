@@ -26,6 +26,37 @@ void main() {
       );
     });
 
+    test('encodeVarint throws OhttpFormatException for negative values', () {
+      expect(() => encodeVarint(-1), throwsA(isA<OhttpFormatException>()));
+    });
+
+    test('encodeVarint throws OhttpFormatException for values above 2^62-1', () {
+      expect(
+        () => encodeVarint(0x4000000000000000),
+        throwsA(isA<OhttpFormatException>()),
+      );
+    });
+
+    // decodeVarint either succeeds or throws OhttpFormatException on arbitrary input.
+    // RangeError on truncated bytes is caught in bhttp.dart:86 and rethrown as
+    // OhttpFormatException; the switch(prefix) arms cover all 4 values of first>>6.
+    property(
+      'decodeVarint on arbitrary bytes only throws OhttpFormatException',
+      () {
+        forAll(
+          binary(),
+          (bytes) {
+            try {
+              decodeVarint(Uint8List.fromList(bytes), 0);
+            } on OhttpFormatException {
+              // accepted
+            }
+          },
+          seed: 42,
+        );
+      },
+    );
+
     // parseResponse is safe on arbitrary bytes: its outer body is wrapped with
     // `on FormatException` and `on RangeError` catch arms that rethrow as
     // OhttpFormatException; OhttpSizeLimitException is raised inside the same
