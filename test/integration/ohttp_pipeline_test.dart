@@ -1,5 +1,3 @@
-// ignore_for_file: public_member_api_docs
-
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -12,169 +10,26 @@ import 'package:test/test.dart';
 
 import '../stubs/gateway_stub.dart';
 import '../test_utils.dart';
-
-// ---------------------------------------------------------------------------
-// Test observer — records which lifecycle events fired (safe fields only).
-// Never captures keys, nonces, shared secrets, or plaintext bodies.
-// ---------------------------------------------------------------------------
-
-final class _TestObserver extends OhttpObserver {
-  bool keyConfigFetched = false;
-  bool keyConfigCacheHit = false;
-  bool postToGateway = false;
-  bool gatewayError = false;
-  bool cacheInvalidated = false;
-  bool decapsulationError = false;
-  bool encapsulationError = false;
-  int? lastGatewayErrorStatus;
-  Type? lastDecapsulationErrorType;
-  Type? lastEncapsulationErrorType;
-
-  @override
-  void onKeyConfigFetched() => keyConfigFetched = true;
-
-  @override
-  void onKeyConfigCacheHit() => keyConfigCacheHit = true;
-
-  @override
-  void onPostToGateway() => postToGateway = true;
-
-  @override
-  void onGatewayError(int statusCode) {
-    gatewayError = true;
-    lastGatewayErrorStatus = statusCode;
-  }
-
-  @override
-  void onCacheInvalidated() => cacheInvalidated = true;
-
-  @override
-  void onDecapsulationError(Type errorType) {
-    decapsulationError = true;
-    lastDecapsulationErrorType = errorType;
-  }
-
-  @override
-  void onEncapsulationError(Type errorType) {
-    encapsulationError = true;
-    lastEncapsulationErrorType = errorType;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Test constants — http:// URLs require HttpClientTransport.insecureForTesting.
-// ---------------------------------------------------------------------------
-
-const _keysUrl = 'http://test.local/keys';
-const _gatewayUrl = 'http://test.local/gateway';
-
-// ---------------------------------------------------------------------------
-// MockClient builder
-// ---------------------------------------------------------------------------
-
-/// Returns a [MockClient] routing:
-///   GET  [_keysUrl]    → 200, body = [keyConfigBytes]
-///   POST [_gatewayUrl] → [gatewayHandler](request)
-MockClient _buildMockClient({
-  required Uint8List keyConfigBytes,
-  required Future<Response> Function(Request) gatewayHandler,
-}) => MockClient((request) async {
-  if (request.method == 'GET' && request.url.toString() == _keysUrl) {
-    return Response.bytes(keyConfigBytes, 200);
-  }
-  if (request.method == 'POST' && request.url.toString() == _gatewayUrl) {
-    return gatewayHandler(request);
-  }
-
-  return Response('Not found', 404);
-});
-
-// ---------------------------------------------------------------------------
-// BHTTP helper — builds a minimal Known-Length 200 response (RFC 9292 §3.2).
-// framing(1) || status(200) || hdrSectionLen(0) || bodyLen || body || trailerLen(0)
-// ---------------------------------------------------------------------------
-
-Uint8List _buildBhttpResponse(List<int> body) {
-  final buf = BytesBuilder()
-    ..add(encodeVarint(1)) // framing indicator: 1 = known-length response
-    ..add(encodeVarint(200)) // status code
-    ..add(encodeVarint(0)) // header section length = 0
-    ..add(encodeVarint(body.length)) // body length
-    ..add(body) // body bytes
-    ..add(encodeVarint(0)); // trailer section length = 0
-
-  return Uint8List.fromList(buf.toBytes());
-}
-
-// Builds a Known-Length 200 BHTTP response (RFC 9292 §3.2) with named headers.
-// Each field line: nameLen(varint) || name || valueLen(varint) || value.
-Uint8List _buildBhttpResponseWithHeaders(List<int> body, List<(String, String)> headers) {
-  final headerBuf = BytesBuilder();
-  for (final (name, value) in headers) {
-    final nameBytes = utf8.encode(name);
-    final valueBytes = utf8.encode(value);
-    headerBuf
-      ..add(encodeVarint(nameBytes.length))
-      ..add(nameBytes)
-      ..add(encodeVarint(valueBytes.length))
-      ..add(valueBytes);
-  }
-  final headerBytes = headerBuf.toBytes();
-
-  final buf = BytesBuilder()
-    ..add(encodeVarint(1)) // framing indicator
-    ..add(encodeVarint(200)) // status code
-    ..add(encodeVarint(headerBytes.length))
-    ..add(headerBytes)
-    ..add(encodeVarint(body.length))
-    ..add(body)
-    ..add(encodeVarint(0)); // trailer section length = 0
-
-  return Uint8List.fromList(buf.toBytes());
-}
-
-// ---------------------------------------------------------------------------
-// Shared gateway handler — KEM decap + seal canned BHTTP response.
-// ---------------------------------------------------------------------------
-
-Future<Response> _gatewayHandlerFor(Request request, Uint8List bhttpResponseBytes) async {
-  final postBody = request.bodyBytes;
-  final exportedSecret = await decapExportedSecret(postBody);
-  final enc = postBody.sublist(ohttpHeaderLen, ohttpHeaderLen + CipherSuite.kemPublicKeyLength);
-  final encResponse = await sealBhttpResponse(enc, exportedSecret, bhttpResponseBytes);
-
-  return Response.bytes(encResponse, 200);
-}
-
-// Shorthand for the default KeyConfig used by 9 of 10 tests:
-// DHKEM(X25519) + HKDF-SHA256 + AES-128-GCM against the fixed gateway key.
-Uint8List _defaultKeyConfigBytes() => multiSuiteKeyConfig(
-  publicKey: gatewayPublicKeyBytes,
-  suiteIds: [(0x0001, 0x0001)],
-);
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
+import 'pipeline_test_utils.dart';
 
 void main() {
   group('OhttpHttpClient integration (RFC 9458 end-to-end)', () {
     test('happy path: full round-trip decrypts canned BHTTP response', () async {
       // Use the fixed gateway public key so the sender's ohttpEncapsulate produces
       // an enc/exportedSecret the stub can re-derive via KEM decap.
-      final keyConfigBytes = _defaultKeyConfigBytes();
-      final bhttpResponseBytes = _buildBhttpResponse(utf8.encode('hello'));
+      final keyConfigBytes = defaultKeyConfigBytes();
+      final bhttpResponseBytes = buildBhttpResponse(utf8.encode('hello'));
 
-      final mockClient = _buildMockClient(
+      final mockClient = buildMockClient(
         keyConfigBytes: keyConfigBytes,
-        gatewayHandler: (req) => _gatewayHandlerFor(req, bhttpResponseBytes),
+        gatewayHandler: (req) => gatewayHandlerFor(req, bhttpResponseBytes),
       );
 
-      final observer = _TestObserver();
+      final observer = PipelineTestObserver();
       final transport = HttpClientTransport.insecureForTesting(
         client: mockClient,
-        keysUrl: Uri.parse(_keysUrl),
-        gatewayUrl: Uri.parse(_gatewayUrl),
+        keysUrl: Uri.parse(testKeysUrl),
+        gatewayUrl: Uri.parse(testGatewayUrl),
       );
       final client = OhttpHttpClient(
         session: OhttpSession.withTransport(transport: transport, observer: observer),
@@ -194,21 +49,21 @@ void main() {
     });
 
     test('happy path: response headers survive the HPKE + BHTTP round trip', () async {
-      final keyConfigBytes = _defaultKeyConfigBytes();
-      final bhttpResponseBytes = _buildBhttpResponseWithHeaders(
+      final keyConfigBytes = defaultKeyConfigBytes();
+      final bhttpResponseBytes = buildBhttpResponseWithHeaders(
         utf8.encode('hello'),
         [('content-type', 'text/plain')],
       );
 
-      final mockClient = _buildMockClient(
+      final mockClient = buildMockClient(
         keyConfigBytes: keyConfigBytes,
-        gatewayHandler: (req) => _gatewayHandlerFor(req, bhttpResponseBytes),
+        gatewayHandler: (req) => gatewayHandlerFor(req, bhttpResponseBytes),
       );
 
       final transport = HttpClientTransport.insecureForTesting(
         client: mockClient,
-        keysUrl: Uri.parse(_keysUrl),
-        gatewayUrl: Uri.parse(_gatewayUrl),
+        keysUrl: Uri.parse(testKeysUrl),
+        gatewayUrl: Uri.parse(testGatewayUrl),
       );
       final client = OhttpHttpClient(
         session: OhttpSession.withTransport(transport: transport),
@@ -230,25 +85,25 @@ void main() {
       // Verifies that the client serialises outbound headers into the BHTTP
       // request before encapsulation: openEncapsulatedRequest decrypts the
       // inner ciphertext and the custom header bytes must be present.
-      final keyConfigBytes = _defaultKeyConfigBytes();
+      final keyConfigBytes = defaultKeyConfigBytes();
       Uint8List? decryptedBhttp;
 
-      final bhttpResponseBytes = _buildBhttpResponse(utf8.encode('ok'));
-      final mockClient = _buildMockClient(
+      final bhttpResponseBytes = buildBhttpResponse(utf8.encode('ok'));
+      final mockClient = buildMockClient(
         keyConfigBytes: keyConfigBytes,
         gatewayHandler: (request) async {
           final postBody = request.bodyBytes;
           decryptedBhttp = await openEncapsulatedRequest(postBody);
           // Still seal a valid response so client.send() completes normally.
 
-          return _gatewayHandlerFor(request, bhttpResponseBytes);
+          return gatewayHandlerFor(request, bhttpResponseBytes);
         },
       );
 
       final transport = HttpClientTransport.insecureForTesting(
         client: mockClient,
-        keysUrl: Uri.parse(_keysUrl),
-        gatewayUrl: Uri.parse(_gatewayUrl),
+        keysUrl: Uri.parse(testKeysUrl),
+        gatewayUrl: Uri.parse(testGatewayUrl),
       );
       final client = OhttpHttpClient(
         session: OhttpSession.withTransport(transport: transport),
@@ -276,28 +131,28 @@ void main() {
     });
 
     test('cache hit: second send within TTL issues only one GET to keysUrl', () async {
-      final keyConfigBytes = _defaultKeyConfigBytes();
-      final bhttpResponseBytes = _buildBhttpResponse(utf8.encode('hi'));
+      final keyConfigBytes = defaultKeyConfigBytes();
+      final bhttpResponseBytes = buildBhttpResponse(utf8.encode('hi'));
       var keysGetCount = 0;
 
       final mockClient = MockClient((request) async {
-        if (request.method == 'GET' && request.url.toString() == _keysUrl) {
+        if (request.method == 'GET' && request.url.toString() == testKeysUrl) {
           keysGetCount++;
 
           return Response.bytes(keyConfigBytes, 200);
         }
-        if (request.method == 'POST' && request.url.toString() == _gatewayUrl) {
-          return _gatewayHandlerFor(request, bhttpResponseBytes);
+        if (request.method == 'POST' && request.url.toString() == testGatewayUrl) {
+          return gatewayHandlerFor(request, bhttpResponseBytes);
         }
 
         return Response('Not found', 404);
       });
 
-      final observer = _TestObserver();
+      final observer = PipelineTestObserver();
       final transport = HttpClientTransport.insecureForTesting(
         client: mockClient,
-        keysUrl: Uri.parse(_keysUrl),
-        gatewayUrl: Uri.parse(_gatewayUrl),
+        keysUrl: Uri.parse(testKeysUrl),
+        gatewayUrl: Uri.parse(testGatewayUrl),
       );
       final client = OhttpHttpClient(
         session: OhttpSession.withTransport(transport: transport, observer: observer),
@@ -319,10 +174,10 @@ void main() {
     // -----------------------------------------------------------------------
 
     test('gateway 503 throws OhttpGatewayException and invalidates the cache', () async {
-      final keyConfigBytes = _defaultKeyConfigBytes();
+      final keyConfigBytes = defaultKeyConfigBytes();
       var keysGetCount = 0;
       final mockClient = MockClient((request) async {
-        if (request.method == 'GET' && request.url.toString() == _keysUrl) {
+        if (request.method == 'GET' && request.url.toString() == testKeysUrl) {
           keysGetCount++;
 
           return Response.bytes(keyConfigBytes, 200);
@@ -330,11 +185,11 @@ void main() {
 
         return Response('', 503);
       });
-      final observer = _TestObserver();
+      final observer = PipelineTestObserver();
       final transport = HttpClientTransport.insecureForTesting(
         client: mockClient,
-        keysUrl: Uri.parse(_keysUrl),
-        gatewayUrl: Uri.parse(_gatewayUrl),
+        keysUrl: Uri.parse(testKeysUrl),
+        gatewayUrl: Uri.parse(testGatewayUrl),
       );
       final client = OhttpHttpClient(
         session: OhttpSession.withTransport(transport: transport, observer: observer),
@@ -359,14 +214,14 @@ void main() {
     });
 
     test('flipped ciphertext byte throws OhttpCryptoException', () async {
-      final keyConfigBytes = _defaultKeyConfigBytes();
-      final mockClient = _buildMockClient(
+      final keyConfigBytes = defaultKeyConfigBytes();
+      final mockClient = buildMockClient(
         keyConfigBytes: keyConfigBytes,
         gatewayHandler: (request) async {
           final postBody = request.bodyBytes;
           final exportedSecret = await decapExportedSecret(postBody);
           final enc = postBody.sublist(ohttpHeaderLen, ohttpHeaderLen + CipherSuite.kemPublicKeyLength);
-          final bhttpResponseBytes = _buildBhttpResponse(utf8.encode('ok'));
+          final bhttpResponseBytes = buildBhttpResponse(utf8.encode('ok'));
           final sealed = await sealBhttpResponse(enc, exportedSecret, bhttpResponseBytes);
           // XOR the first ciphertext byte (immediately after the 16-byte response_nonce)
           // to produce an AEAD authentication failure.
@@ -375,11 +230,11 @@ void main() {
           return Response.bytes(sealed, 200);
         },
       );
-      final observer = _TestObserver();
+      final observer = PipelineTestObserver();
       final transport = HttpClientTransport.insecureForTesting(
         client: mockClient,
-        keysUrl: Uri.parse(_keysUrl),
-        gatewayUrl: Uri.parse(_gatewayUrl),
+        keysUrl: Uri.parse(testKeysUrl),
+        gatewayUrl: Uri.parse(testGatewayUrl),
       );
       final client = OhttpHttpClient(
         session: OhttpSession.withTransport(transport: transport, observer: observer),
@@ -394,18 +249,18 @@ void main() {
     });
 
     test('truncated response body throws OhttpDecapsulationException', () async {
-      final keyConfigBytes = _defaultKeyConfigBytes();
+      final keyConfigBytes = defaultKeyConfigBytes();
       // 8 bytes is fewer than responseNonceLen (16), so ohttpDecapsulate
       // must reject it as too short before attempting any AEAD operation.
-      final mockClient = _buildMockClient(
+      final mockClient = buildMockClient(
         keyConfigBytes: keyConfigBytes,
         gatewayHandler: (request) async => Response.bytes(Uint8List(8), 200),
       );
-      final observer = _TestObserver();
+      final observer = PipelineTestObserver();
       final transport = HttpClientTransport.insecureForTesting(
         client: mockClient,
-        keysUrl: Uri.parse(_keysUrl),
-        gatewayUrl: Uri.parse(_gatewayUrl),
+        keysUrl: Uri.parse(testKeysUrl),
+        gatewayUrl: Uri.parse(testGatewayUrl),
       );
       final client = OhttpHttpClient(
         session: OhttpSession.withTransport(transport: transport, observer: observer),
@@ -419,9 +274,9 @@ void main() {
     });
 
     test('gateway POST delay exceeds timeout throws OhttpTimeoutException', () async {
-      final keyConfigBytes = _defaultKeyConfigBytes();
+      final keyConfigBytes = defaultKeyConfigBytes();
       // Gateway delays 2 s — 20× the 100 ms transport timeout — to absorb CI variance.
-      final mockClient = _buildMockClient(
+      final mockClient = buildMockClient(
         keyConfigBytes: keyConfigBytes,
         gatewayHandler: (request) async {
           await Future<void>.delayed(const Duration(seconds: 2));
@@ -431,8 +286,8 @@ void main() {
       );
       final transport = HttpClientTransport.insecureForTesting(
         client: mockClient,
-        keysUrl: Uri.parse(_keysUrl),
-        gatewayUrl: Uri.parse(_gatewayUrl),
+        keysUrl: Uri.parse(testKeysUrl),
+        gatewayUrl: Uri.parse(testGatewayUrl),
         postToGatewayTimeout: const Duration(milliseconds: 100),
       );
       final client = OhttpHttpClient(
@@ -446,16 +301,16 @@ void main() {
     });
 
     test('response body over size cap throws OhttpSizeLimitException', () async {
-      final keyConfigBytes = _defaultKeyConfigBytes();
+      final keyConfigBytes = defaultKeyConfigBytes();
       // 512-byte body exceeds the 64-byte cap; size check fires before decapsulation.
-      final mockClient = _buildMockClient(
+      final mockClient = buildMockClient(
         keyConfigBytes: keyConfigBytes,
         gatewayHandler: (request) async => Response.bytes(Uint8List(512), 200),
       );
       final transport = HttpClientTransport.insecureForTesting(
         client: mockClient,
-        keysUrl: Uri.parse(_keysUrl),
-        gatewayUrl: Uri.parse(_gatewayUrl),
+        keysUrl: Uri.parse(testKeysUrl),
+        gatewayUrl: Uri.parse(testGatewayUrl),
       );
       final client = OhttpHttpClient(
         session: OhttpSession.withTransport(
@@ -475,18 +330,18 @@ void main() {
     });
 
     test('decrypted body over maxBodyBytes limit throws OhttpSizeLimitException', () async {
-      final keyConfigBytes = _defaultKeyConfigBytes();
+      final keyConfigBytes = defaultKeyConfigBytes();
       // 100-byte BHTTP body; limit set to 50 — layer-2 check fires after HPKE decryption.
-      final bhttpResponseBytes = _buildBhttpResponse(Uint8List(100));
+      final bhttpResponseBytes = buildBhttpResponse(Uint8List(100));
 
-      final mockClient = _buildMockClient(
+      final mockClient = buildMockClient(
         keyConfigBytes: keyConfigBytes,
-        gatewayHandler: (req) => _gatewayHandlerFor(req, bhttpResponseBytes),
+        gatewayHandler: (req) => gatewayHandlerFor(req, bhttpResponseBytes),
       );
       final transport = HttpClientTransport.insecureForTesting(
         client: mockClient,
-        keysUrl: Uri.parse(_keysUrl),
-        gatewayUrl: Uri.parse(_gatewayUrl),
+        keysUrl: Uri.parse(testKeysUrl),
+        gatewayUrl: Uri.parse(testGatewayUrl),
       );
       final client = OhttpHttpClient(
         session: OhttpSession.withTransport(
@@ -513,16 +368,16 @@ void main() {
         publicKey: gatewayPublicKeyBytes,
         suiteIds: [(0x0002, 0x0002)],
       );
-      final mockClient = _buildMockClient(
+      final mockClient = buildMockClient(
         keyConfigBytes: keyConfigBytes,
         gatewayHandler: (request) async => Response('', 200),
       );
       final transport = HttpClientTransport.insecureForTesting(
         client: mockClient,
-        keysUrl: Uri.parse(_keysUrl),
-        gatewayUrl: Uri.parse(_gatewayUrl),
+        keysUrl: Uri.parse(testKeysUrl),
+        gatewayUrl: Uri.parse(testGatewayUrl),
       );
-      final observer = _TestObserver();
+      final observer = PipelineTestObserver();
       final client = OhttpHttpClient(
         session: OhttpSession.withTransport(transport: transport, observer: observer),
       );
