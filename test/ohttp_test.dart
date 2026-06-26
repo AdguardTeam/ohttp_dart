@@ -5,7 +5,7 @@ import 'package:ohttp_dart/ohttp_dart.dart';
 import 'package:ohttp_dart/src/cipher_suite.dart';
 import 'package:test/test.dart';
 
-import 'support/gateway_stub.dart';
+import 'stubs/gateway_stub.dart';
 import 'test_utils.dart';
 
 void main() {
