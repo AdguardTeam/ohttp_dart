@@ -68,16 +68,14 @@ class OhttpHttpClient extends BaseClient {
 
     final responseData = await _session.send(requestData);
 
-    final streamedResponse = StreamedResponse(
+    return StreamedResponse(
       ByteStream.fromBytes(responseData.body),
       responseData.statusCode,
       contentLength: responseData.body.length,
+      headers: {
+        for (final (name, value) in responseData.headers) name: value,
+      },
     );
-    for (final (name, value) in responseData.headers) {
-      streamedResponse.headers[name] = value;
-    }
-
-    return streamedResponse;
   }
 
   @override

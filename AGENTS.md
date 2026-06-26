@@ -16,8 +16,9 @@ optional adapter for `package:http`.
 | **Language**         | Dart 3.11.1+                                                                   |
 | **Crypto**           | `cryptography` 2.9.0 (pure Dart, no native dependencies)                       |
 | **HTTP Client**      | `http` 1.6.0 (optional adapter)                                                |
+| **Annotations**      | `meta` 1.16.0 (`@visibleForTesting`)                                           |
 | **Architecture**     | Transport-agnostic core + optional `package:http` adapter                      |
-| **Testing**          | `test` 1.25.6                                                                  |
+| **Testing**          | `test` 1.25.6 + `kiri_check` 1.3.1 (property-based testing)                    |
 | **Linting**          | `lints` 3.0.0 + Dart Code Metrics (inline in `analysis_options.yaml`)          |
 | **Target Platforms** | iOS, macOS, Android, Windows                                                   |
 | **Formatter**        | `line-length: 120`, `require_trailing_commas` enabled                          |
@@ -44,14 +45,15 @@ ohttp_dart/
 │       ├── ohttp_observer.dart           # Lifecycle event observer interface
 │       ├── ohttp_session.dart            # OHTTP session orchestrator
 │       ├── ohttp_transport.dart          # Transport abstraction interface
-│       ├── wipe_bytes_extension.dart     # Secure memory wipe utility
+│       ├── erasable_byte_array.dart       # Byte buffer that zeroes on erase(), guards post-erase reads
 │       └── adapters/
 │           └── http/
 │               ├── http_client_transport.dart   # HttpClientTransport implementation
 │               └── ohttp_http_client.dart       # OhttpHttpClient drop-in replacement
 ├── test/                                  # Unit tests (mirrors lib/ structure)
-│   ├── bhttp_test.dart
-│   ├── hpke_test.dart
+│   ├── bhttp_test.dart                    # Includes property-based tests (kiri_check)
+│   ├── erasable_byte_array_test.dart      # ErasableByteArray zeroing / post-erase guard
+│   ├── hpke_test.dart                     # RFC 9180 vectors + property-based tests (kiri_check)
 │   ├── key_config_cache_test.dart
 │   ├── ohttp_observer_test.dart          # Observer lifecycle tests
 │   ├── ohttp_session_test.dart
