@@ -24,14 +24,14 @@ class OhttpConfigException extends OhttpException {
   const OhttpConfigException(super.message, {super.stackTrace});
 }
 
-/// Thrown when the gateway's [KeyConfig] announces only cipher suites
+/// Thrown when the gateway's [OhttpKeyConfig] announces only cipher suites
 /// that this library does not implement, or when a specific KEM/KDF/AEAD
 /// component is not supported.
 class OhttpUnsupportedSuiteException extends OhttpException {
   const OhttpUnsupportedSuiteException(super.message, {super.stackTrace});
 }
 
-/// Thrown when the binary [KeyConfig] payload fetched from the gateway
+/// Thrown when the binary [OhttpKeyConfig] payload fetched from the gateway
 /// is structurally malformed — too short, wrong lengths, trailing data,
 /// invalid symmetric algorithms section, etc.
 class OhttpKeyConfigException extends OhttpException {

@@ -2,10 +2,10 @@ import 'dart:developer' as developer;
 
 /// Observer for OHTTP request lifecycle events.
 abstract class OhttpObserver {
-  /// Called when a [KeyConfig] was successfully fetched from the gateway.
+  /// Called when an [OhttpKeyConfig] was successfully fetched from the gateway.
   void onKeyConfigFetched() {}
 
-  /// Called when a cached [KeyConfig] was reused (no network request).
+  /// Called when a cached [OhttpKeyConfig] was reused (no network request).
   void onKeyConfigCacheHit() {}
 
   /// Called right before posting the encapsulated request to the gateway.
@@ -20,7 +20,7 @@ abstract class OhttpObserver {
   /// [statusCode] is the HTTP status code returned by the gateway.
   void onGatewayError(int statusCode) {}
 
-  /// Called when the cached [KeyConfig] is invalidated due to a gateway error.
+  /// Called when the cached [OhttpKeyConfig] is invalidated due to a gateway error.
   /// This event is always fired immediately after [onGatewayError].
   void onCacheInvalidated() {}
 

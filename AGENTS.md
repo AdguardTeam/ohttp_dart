@@ -186,7 +186,7 @@ Write or update tests when:
 - Modifying data serialization formats
 - Adding or changing observer lifecycle events
 
-**Test location** mirrors source: `test/` mirrors `lib/` structure.
+**Test location**: unit tests mirror `lib/` (e.g. `test/hpke_test.dart` ↔ `lib/src/hpke.dart`); adapter tests live in `test/adapters/`, end-to-end and fuzz tests in `test/integration/`, and shared gateway stubs in `test/stubs/`.
 
 **Coverage expectation**: Maintain high test coverage for cryptographic and protocol logic.
 
