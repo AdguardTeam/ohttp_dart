@@ -260,7 +260,9 @@ Tests cover:
 - `ErasableByteArray` zeroing and post-erase guard
 
 HPKE and BHTTP also have property-based tests (via `kiri_check`) alongside the
-fixed RFC vectors.
+fixed RFC vectors, and an integration fuzz suite (`test/integration/fuzz_test.dart`,
+also `kiri_check`) checks that varint decoding, BHTTP response parsing, and OHTTP
+KeyConfig parsing raise only typed `OhttpException` subtypes on arbitrary bytes.
 
 ## License
 

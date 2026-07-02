@@ -50,7 +50,7 @@ ohttp_dart/
 │           └── http/
 │               ├── http_client_transport.dart   # HttpClientTransport implementation
 │               └── ohttp_http_client.dart       # OhttpHttpClient drop-in replacement
-├── test/                                  # Unit tests (mirrors lib/ structure)
+├── test/                                  # Unit, adapter, and integration tests
 │   ├── bhttp_test.dart                    # Includes property-based tests (kiri_check)
 │   ├── erasable_byte_array_test.dart      # ErasableByteArray zeroing / post-erase guard
 │   ├── hpke_test.dart                     # RFC 9180 vectors + property-based tests (kiri_check)
@@ -59,8 +59,14 @@ ohttp_dart/
 │   ├── ohttp_session_test.dart
 │   ├── ohttp_test.dart
 │   ├── test_utils.dart
-│   └── adapters/
-│       └── http_adapter_test.dart
+│   ├── adapters/
+│   │   └── http_adapter_test.dart
+│   ├── integration/                       # End-to-end pipeline + fuzz tests
+│   │   ├── fuzz_test.dart                  # kiri_check property / fuzz tests
+│   │   ├── ohttp_pipeline_test.dart        # Full encapsulate → gateway → decapsulate round trip
+│   │   └── pipeline_test_utils.dart        # Shared integration helpers
+│   └── stubs/
+│       └── gateway_stub.dart               # In-memory gateway stub
 ├── example/                               # Usage examples
 │   └── ohttp_dart_example.dart
 └── analysis_options.yaml                  # Linter rules, DCM config, formatter settings
