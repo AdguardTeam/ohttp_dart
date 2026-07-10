@@ -57,13 +57,7 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> {
           HttpClientTransport Function(http.Client client) transport,
           String authority,
         })
-      >{
-        'httpbin': (transport: httpbinTransport, authority: httpbinAuthority),
-        'PIR Gateway': (
-          transport: pirGatewayTransport,
-          authority: pirGatewayAuthority,
-        ),
-      };
+      >{'httpbin': (transport: httpbinTransport, authority: httpbinAuthority)};
   String _selectedGateway = 'httpbin';
 
   @override
@@ -103,8 +97,6 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> {
       // Set sensible default path for each gateway
       if (name == 'httpbin') {
         _pathController.text = '/get';
-      } else if (name == 'PIR Gateway') {
-        _pathController.text = '/.well-known/private-token-issuer-directory';
       }
     });
   }

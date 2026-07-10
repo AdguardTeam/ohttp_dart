@@ -43,11 +43,10 @@ Flutter UI ──► OhttpSession ──► HttpClientTransport ──► OHTTP 
 lib/
 ├── main.dart                     # Flutter UI — OHTTP demo screen
 ├── src/
-│   ├── gateways.dart             # Gateway transport factories (httpbin, PIR Gateway)
+│   ├── gateways.dart             # Gateway transport factories
 │   └── log_observer.dart         # OhttpObserver → UI log adapter
 integration_test/
 ├── simple_test.dart              # E2E: GET/POST via OHTTP, Direct, comparison
-└── pir_gateway_test.dart         # E2E: PIR Gateway round-trip
 test/
 └── widget_test.dart              # UI rendering tests
 ```
@@ -76,8 +75,6 @@ Uses [AdguardTeam/HttpBin](https://github.com/AdguardTeam/HttpBin) deployed at `
 
 - `GET /ohttp/config` — OHTTP KeyConfig (41 bytes, KEM=X25519, KDF=HKDF-SHA256, AEAD=AES-128-GCM)
 - `POST /ohttp/gateway` — OHTTP gateway (accepts `message/ohttp-req`)
-
-Also supports [PIR Gateway](https://pir-gateway.adtidy.org) (`/ohttp-configs` + `/ohttp-request`).
 
 ## Library Architecture
 
