@@ -404,4 +404,33 @@ void main() {
       client.close();
     });
   });
+
+  group('OhttpHttpClient.create', () {
+    test('wires transport, cache, and session into a working client', () async {
+      var keysUrlHit = false;
+      final mockClient = MockClient((req) async {
+        if (req.url.toString() == httpsKeysUrl) {
+          keysUrlHit = true;
+
+          return Response.bytes(validKeyConfig(), 200);
+        }
+
+        return Response.bytes(Uint8List(0), 200);
+      });
+
+      final client = OhttpHttpClient.create(
+        client: mockClient,
+        keysUrl: Uri.parse(httpsKeysUrl),
+        gatewayUrl: Uri.parse(httpsGatewayUrl),
+      );
+
+      // Decapsulation will fail (fake gateway response), but the key config
+      // fetch proves the wiring is correct.
+      await expectLater(
+        client.send(Request('GET', Uri.parse('https://example.com/'))),
+        throwsA(isA<OhttpException>()),
+      );
+      expect(keysUrlHit, isTrue);
+    });
+  });
 }

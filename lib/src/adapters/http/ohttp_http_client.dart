@@ -1,7 +1,13 @@
 import 'package:http/http.dart';
 
+import 'package:ohttp_dart/src/bhttp_response_limits.dart';
+import 'package:ohttp_dart/src/key_config_cache.dart';
+import 'package:ohttp_dart/src/ohttp_constants.dart';
 import 'package:ohttp_dart/src/ohttp_data.dart';
+import 'package:ohttp_dart/src/ohttp_observer.dart';
 import 'package:ohttp_dart/src/ohttp_session.dart';
+
+import 'http_client_transport.dart';
 
 /// An [Client] that tunnels requests through an OHTTP gateway.
 ///
@@ -32,6 +38,43 @@ class OhttpHttpClient extends BaseClient {
     Client? closeWith,
   }) : _session = session,
        _closeWith = closeWith;
+
+  /// Creates a fully wired [OhttpHttpClient], constructing all internal components from raw parameters.
+  factory OhttpHttpClient.create({
+    required Client client,
+    required Uri keysUrl,
+    required Uri gatewayUrl,
+    OhttpObserver? observer,
+    Duration keyConfigCacheTtl = OhttpConstants.defaultKeyConfigCacheTtl,
+    Duration fetchKeyConfigTimeout = OhttpConstants.defaultFetchKeyConfigTimeout,
+    Duration postToGatewayTimeout = OhttpConstants.defaultPostToGatewayTimeout,
+    bool retryOnGatewayError = true,
+    int maxEncryptedResponseBytes = OhttpConstants.defaultMaxEncryptedResponseBytes,
+    BhttpResponseLimits decryptedResponseLimits = const BhttpResponseLimits(),
+  }) {
+    final transport = HttpClientTransport(
+      client: client,
+      keysUrl: keysUrl,
+      gatewayUrl: gatewayUrl,
+      fetchKeyConfigTimeout: fetchKeyConfigTimeout,
+      postToGatewayTimeout: postToGatewayTimeout,
+    );
+    final cache = KeyConfigCache(
+      transport: transport,
+      observer: observer,
+      ttl: keyConfigCacheTtl,
+    );
+    final session = OhttpSession(
+      transport: transport,
+      cache: cache,
+      observer: observer,
+      retryOnGatewayError: retryOnGatewayError,
+      maxEncryptedResponseBytes: maxEncryptedResponseBytes,
+      decryptedResponseLimits: decryptedResponseLimits,
+    );
+
+    return OhttpHttpClient(session: session);
+  }
 
   @override
   Future<StreamedResponse> send(BaseRequest request) async {
