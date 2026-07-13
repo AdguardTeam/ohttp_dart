@@ -117,17 +117,23 @@ class OhttpSession {
       body: request.body,
     );
 
-    if (!_retryOnGatewayError) {
-      return _encapsulateAndSend(binaryRequest);
-    }
+    final stopwatch = Stopwatch()..start();
 
+    OhttpResponseData result;
     try {
-      return await _encapsulateAndSend(binaryRequest);
+      result = await _encapsulateAndSend(binaryRequest);
     } on OhttpGatewayException {
+      if (!_retryOnGatewayError) {
+        rethrow;
+      }
       _observer?.notifySafe((o) => o.onGatewayRetry());
-
-      return _encapsulateAndSend(binaryRequest);
+      result = await _encapsulateAndSend(binaryRequest);
     }
+
+    stopwatch.stop();
+    _observer?.notifySafe((o) => o.onRoundTripCompleted(stopwatch.elapsed));
+
+    return result;
   }
 
   /// Encapsulates, posts, decapsulates, and parses one round-trip;

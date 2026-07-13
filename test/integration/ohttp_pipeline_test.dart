@@ -46,6 +46,9 @@ void main() {
       expect(observer.gatewayError, isFalse);
       expect(observer.decapsulationError, isFalse);
       expect(observer.encapsulationError, isFalse);
+      expect(observer.roundTripCompleted, isTrue, reason: 'onRoundTripCompleted must fire on success');
+      expect(observer.lastRoundTripElapsed, isNotNull);
+      expect(observer.lastRoundTripElapsed! >= Duration.zero, isTrue);
     });
 
     test('happy path: response headers survive the HPKE + BHTTP round trip', () async {
