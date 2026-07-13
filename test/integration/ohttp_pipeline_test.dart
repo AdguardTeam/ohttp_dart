@@ -192,7 +192,11 @@ void main() {
         gatewayUrl: Uri.parse(testGatewayUrl),
       );
       final client = OhttpHttpClient(
-        session: OhttpSession.withTransport(transport: transport, observer: observer),
+        session: OhttpSession.withTransport(
+          transport: transport,
+          observer: observer,
+          retryOnGatewayError: false,
+        ),
       );
 
       // First send → OhttpGatewayException; cache must be invalidated.
