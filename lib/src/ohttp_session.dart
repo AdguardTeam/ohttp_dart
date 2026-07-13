@@ -5,6 +5,7 @@ import 'bhttp_response_limits.dart';
 import 'exceptions.dart';
 import 'key_config_cache.dart';
 import 'ohttp.dart';
+import 'ohttp_constants.dart';
 import 'ohttp_data.dart';
 import 'ohttp_observer.dart';
 import 'ohttp_transport.dart';
@@ -36,11 +37,6 @@ import 'ohttp_transport.dart';
 /// [observer] receives lifecycle event notifications.
 ///
 class OhttpSession {
-  /// Default limit for raw encrypted response from the gateway.
-  /// Set to 16 MiB — max BHTTP body (10 MiB) plus OHTTP/BHTTP overhead
-  /// (nonce, AEAD tag, framing, headers).
-  static const _defaultMaxEncryptedResponseBytes = 16 * 1024 * 1024; // 16 MiB
-
   static int _validateMaxEncryptedResponseBytes(int value) {
     if (value <= 0) {
       throw OhttpConfigException(
@@ -83,7 +79,7 @@ class OhttpSession {
     required KeyConfigCache cache,
     OhttpObserver? observer,
     bool retryOnGatewayError = true,
-    int maxEncryptedResponseBytes = _defaultMaxEncryptedResponseBytes,
+    int maxEncryptedResponseBytes = OhttpConstants.defaultMaxEncryptedResponseBytes,
     BhttpResponseLimits decryptedResponseLimits = const BhttpResponseLimits(),
   }) : _transport = transport,
        _cache = cache,
@@ -98,7 +94,7 @@ class OhttpSession {
     required OhttpTransport transport,
     OhttpObserver? observer,
     bool retryOnGatewayError = true,
-    int maxEncryptedResponseBytes = _defaultMaxEncryptedResponseBytes,
+    int maxEncryptedResponseBytes = OhttpConstants.defaultMaxEncryptedResponseBytes,
     BhttpResponseLimits decryptedResponseLimits = const BhttpResponseLimits(),
   }) : _transport = transport,
        _cache = KeyConfigCache(transport: transport, observer: observer),

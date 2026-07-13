@@ -1,10 +1,8 @@
+import 'ohttp_constants.dart';
+
 /// Configuration for BHTTP response size limits.
 /// Controls maximum allowed sizes for response headers and body to prevent resource exhaustion.
 class BhttpResponseLimits {
-  static const int _defaultMaxHeaderBytes = 16384; // 16 KiB
-
-  static const int _defaultMaxBodyBytes = 10 * 1024 * 1024; // 10 MiB
-
   /// Maximum total size of all response headers in bytes.
   final int maxHeaderBytes;
 
@@ -13,7 +11,7 @@ class BhttpResponseLimits {
 
   /// Creates response limits with specified or default values.
   const BhttpResponseLimits({
-    this.maxHeaderBytes = _defaultMaxHeaderBytes,
-    this.maxBodyBytes = _defaultMaxBodyBytes,
+    this.maxHeaderBytes = OhttpConstants.defaultMaxResponseHeaderBytes,
+    this.maxBodyBytes = OhttpConstants.defaultMaxResponseBodyBytes,
   });
 }

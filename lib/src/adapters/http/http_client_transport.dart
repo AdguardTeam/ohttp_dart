@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:meta/meta.dart';
 import 'package:ohttp_dart/src/exceptions.dart';
+import 'package:ohttp_dart/src/ohttp_constants.dart';
 import 'package:ohttp_dart/src/ohttp_transport.dart';
 
 /// An [OhttpTransport] that delegates HTTP calls to an injected [http.Client].
@@ -14,7 +15,6 @@ import 'package:ohttp_dart/src/ohttp_transport.dart';
 /// retains ownership of the [http.Client].
 class HttpClientTransport implements OhttpTransport {
   static const _ohttpMediaType = 'message/ohttp-req';
-  static const _defaultTimeout = Duration(seconds: 30);
 
   static Duration _validateDuration(Duration value, String name) {
     if (value <= Duration.zero) {
@@ -64,8 +64,8 @@ class HttpClientTransport implements OhttpTransport {
     required http.Client client,
     required Uri keysUrl,
     required Uri gatewayUrl,
-    Duration fetchKeyConfigTimeout = _defaultTimeout,
-    Duration postToGatewayTimeout = _defaultTimeout,
+    Duration fetchKeyConfigTimeout = OhttpConstants.defaultFetchKeyConfigTimeout,
+    Duration postToGatewayTimeout = OhttpConstants.defaultPostToGatewayTimeout,
   }) : _client = client,
        _keysUrl = _validateHttpsScheme(keysUrl, 'keysUrl'),
        _gatewayUrl = _validateHttpsScheme(gatewayUrl, 'gatewayUrl'),
@@ -81,8 +81,8 @@ class HttpClientTransport implements OhttpTransport {
     required http.Client client,
     required Uri keysUrl,
     required Uri gatewayUrl,
-    Duration fetchKeyConfigTimeout = _defaultTimeout,
-    Duration postToGatewayTimeout = _defaultTimeout,
+    Duration fetchKeyConfigTimeout = OhttpConstants.defaultFetchKeyConfigTimeout,
+    Duration postToGatewayTimeout = OhttpConstants.defaultPostToGatewayTimeout,
   }) : _client = client,
        _keysUrl = keysUrl,
        _gatewayUrl = gatewayUrl,

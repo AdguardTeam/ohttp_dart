@@ -1,4 +1,5 @@
 import 'ohttp.dart';
+import 'ohttp_constants.dart';
 import 'ohttp_observer.dart';
 import 'ohttp_transport.dart';
 
@@ -11,8 +12,6 @@ import 'ohttp_transport.dart';
 /// for forced eviction.
 
 class KeyConfigCache {
-  static const _defaultTtl = Duration(hours: 1);
-
   final OhttpTransport _transport;
   final Duration _ttl;
   final DateTime Function() _now;
@@ -27,7 +26,7 @@ class KeyConfigCache {
     required OhttpTransport transport,
     DateTime Function()? now,
     OhttpObserver? observer,
-    Duration ttl = _defaultTtl,
+    Duration ttl = OhttpConstants.defaultKeyConfigCacheTtl,
   }) : _transport = transport,
        _ttl = ttl,
        _now = now ?? (() => DateTime.now()),
