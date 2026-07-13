@@ -72,19 +72,27 @@ void main() {
     });
 
     test('invalidates cache on OhttpGatewayException', () async {
+      // Use a no-retry session so cache invalidation mechanics can be tested
+      // in isolation without the automatic retry fetching a new key config.
+      final noRetrySession = OhttpSession(
+        transport: transport,
+        cache: KeyConfigCache(transport: transport),
+        retryOnGatewayError: false,
+      );
+
       // Seed the cache.
-      await expectLater(session.send(request), throwsA(anything));
+      await expectLater(noRetrySession.send(request), throwsA(anything));
       expect(transport.fetchCount, 1);
 
       // Make postToGateway fail with a gateway error.
       transport.postError = const OhttpGatewayException(statusCode: 502, message: 'bad gateway');
 
-      await expectLater(session.send(request), throwsA(isA<OhttpGatewayException>()));
+      await expectLater(noRetrySession.send(request), throwsA(isA<OhttpGatewayException>()));
       // The gateway error invalidated the cache; the next send must re-fetch.
       expect(transport.fetchCount, 1); // invalidation does not itself fetch
 
       transport.postError = null;
-      await expectLater(session.send(request), throwsA(anything));
+      await expectLater(noRetrySession.send(request), throwsA(anything));
       expect(transport.fetchCount, 2); // re-fetch after invalidation
     });
 
@@ -375,6 +383,60 @@ void main() {
         ),
         throwsA(isA<OhttpConfigException>()),
       );
+    });
+  });
+
+  group('Retry on gateway error', () {
+    late _FakeTransport transport;
+
+    final request = OhttpRequestData(
+      method: 'GET',
+      scheme: 'https',
+      authority: 'example.com',
+      path: '/',
+    );
+
+    setUp(() => transport = _FakeTransport());
+
+    OhttpSession makeSession({bool retry = true}) => OhttpSession(
+      transport: transport,
+      cache: KeyConfigCache(transport: transport),
+      retryOnGatewayError: retry,
+    );
+
+    test('retries once on OhttpGatewayException', () async {
+      transport.postError = const OhttpGatewayException(statusCode: 502, message: 'bad gateway');
+
+      await expectLater(
+        makeSession().send(request),
+        throwsA(isA<OhttpGatewayException>()),
+      );
+      expect(transport.postCount, 2); // tried twice
+      expect(transport.fetchCount, 2); // fetched fresh key for retry
+    });
+
+    test('does not retry when retryOnGatewayError is false', () async {
+      transport.postError = const OhttpGatewayException(statusCode: 502, message: 'bad gateway');
+
+      await expectLater(
+        makeSession(retry: false).send(request),
+        throwsA(isA<OhttpGatewayException>()),
+      );
+      expect(transport.postCount, 1);
+      expect(transport.fetchCount, 1);
+    });
+
+    test('does not retry on non-gateway errors', () async {
+      transport.postError = OhttpNetworkException(
+        'network error',
+        cause: Exception('connection refused'),
+      );
+
+      await expectLater(
+        makeSession().send(request),
+        throwsA(isA<OhttpNetworkException>()),
+      );
+      expect(transport.postCount, 1); // no retry for non-gateway errors
     });
   });
 

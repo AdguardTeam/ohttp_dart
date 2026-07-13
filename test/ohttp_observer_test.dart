@@ -41,6 +41,9 @@ class _RecordingObserver extends OhttpObserver {
 
   @override
   void onCacheInvalidated() => events.add('cacheInvalidated');
+
+  @override
+  void onGatewayRetry() => events.add('gatewayRetry');
 }
 
 /// Observer that throws from every callback.
@@ -65,6 +68,9 @@ class _ThrowingObserver extends OhttpObserver {
 
   @override
   void onEncapsulationError(Type errorType) => throw Exception('fail');
+
+  @override
+  void onGatewayRetry() => throw Exception('fail');
 }
 
 /// KeyConfigCache subclass that returns a config with unsupported KDF/AEAD,
@@ -185,6 +191,27 @@ void main() {
       await expectLater(s.send(request), throwsA(isA<OhttpUnsupportedSuiteException>()));
       expect(observer.events, contains('encapsulationError'));
       expect(observer.lastEncapsulationError, OhttpUnsupportedSuiteException);
+    });
+
+    test('onGatewayRetry is called on retry', () async {
+      final s = makeSession();
+      transport.postError = const OhttpGatewayException(statusCode: 502, message: 'bad gateway');
+
+      await expectLater(s.send(request), throwsA(isA<OhttpGatewayException>()));
+      expect(observer.events, contains('gatewayRetry'));
+    });
+
+    test('onGatewayRetry is not called when retryOnGatewayError is false', () async {
+      final s = OhttpSession(
+        transport: transport,
+        cache: KeyConfigCache(transport: transport, observer: observer),
+        observer: observer,
+        retryOnGatewayError: false,
+      );
+      transport.postError = const OhttpGatewayException(statusCode: 502, message: 'bad gateway');
+
+      await expectLater(s.send(request), throwsA(isA<OhttpGatewayException>()));
+      expect(observer.events, isNot(contains('gatewayRetry')));
     });
   });
   group('KeyConfigCache with observer', () {
