@@ -29,6 +29,8 @@ consumers using `package:http`.
 `OhttpSession` orchestrates the full pipeline: cache lookup → BHTTP
 serialization → OHTTP encapsulation → transport call → decapsulation →
 BHTTP parsing. Cache invalidation happens automatically on gateway errors.
+When `retryOnGatewayError` is enabled (the default), a single automatic
+retry is performed with a freshly fetched key config.
 
 ### Observer Pattern
 
@@ -56,6 +58,12 @@ class MyObserver extends OhttpObserver {
 
   @override
   void onEncapsulationError(Type errorType) => print('Encapsulation failed: $errorType');
+
+  @override
+  void onGatewayRetry() => print('Retrying after gateway error');
+
+  @override
+  void onRoundTripCompleted(Duration elapsed) => print('Round trip completed in $elapsed');
 }
 
 final session = OhttpSession.withTransport(

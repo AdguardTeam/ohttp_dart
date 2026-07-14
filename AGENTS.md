@@ -23,7 +23,7 @@ optional adapter for `package:http`.
 | **Target Platforms** | iOS, macOS, Android, Windows                                                   |
 | **Formatter**        | `line-length: 120`, `require_trailing_commas` enabled                          |
 | **Strict analysis**  | `strict-casts: true`, `strict-raw-types: true`                                 |
-| **Version**          | 0.1.0                                                                          |
+| **Version**          | 0.3.0                                                                          |
 | **Publish**          | Not published (`publish_to: none`)                                             |
 
 ## Project Structure
@@ -41,6 +41,7 @@ ohttp_dart/
 │       ├── hpke.dart                     # HPKE Base Mode Sender (RFC 9180)
 │       ├── key_config_cache.dart         # TTL cache with single-flight for key configs
 │       ├── ohttp.dart                    # OHTTP encap/decap + KeyConfig (RFC 9458)
+│       ├── ohttp_constants.dart         # Centralized default values
 │       ├── ohttp_data.dart               # Request / response data types
 │       ├── ohttp_observer.dart           # Lifecycle event observer interface
 │       ├── ohttp_session.dart            # OHTTP session orchestrator
@@ -303,11 +304,14 @@ The core library defines `OhttpTransport` interface. Implementations:
 - Each session owns its transport and cache instances
 - Sessions are NOT thread-safe by default (use external synchronization if needed)
 - Sessions accept an optional `OhttpObserver` for lifecycle event notifications
+- When `retryOnGatewayError` is `true` (the default), a single automatic retry is performed
+  after an `OhttpGatewayException`: the cache is invalidated, a fresh config is fetched,
+  and the request is re-sent once
 
 ### Observer Pattern
 
 - `OhttpObserver` provides lifecycle event hooks (abstract class with no-op default methods)
-- Events: `onKeyConfigFetched`, `onKeyConfigCacheHit`, `onPostToGateway`, `onDecapsulationError`, `onGatewayError`, `onCacheInvalidated`, `onEncapsulationError`
+- Events: `onKeyConfigFetched`, `onKeyConfigCacheHit`, `onPostToGateway`, `onDecapsulationError`, `onGatewayError`, `onCacheInvalidated`, `onEncapsulationError`, `onGatewayRetry`, `onRoundTripCompleted`
 - Observer errors are suppressed via `notifySafe()` — they must not affect the OHTTP pipeline
 - Observer is optional and nullable throughout the API
 - **Security**: observer callbacks must never receive or log cryptographic material (keys, nonces, shared secrets), raw inner request/response bodies, or plaintext headers — only lifecycle signals (success/failure events) and safe metadata (status codes, error types) are permitted
