@@ -20,6 +20,20 @@ MockClient _mockClient(
   return Response('Not found', 404);
 });
 
+/// Client that tracks how many times [close] was called.
+class _CloseTrackingClient extends BaseClient {
+  int closeCallCount = 0;
+
+  @override
+  Future<StreamedResponse> send(BaseRequest request) async => StreamedResponse(ByteStream.fromBytes(Uint8List(0)), 200);
+
+  @override
+  void close() {
+    closeCallCount++;
+    super.close();
+  }
+}
+
 /// Fake session that captures the [OhttpRequestData] for inspection.
 class _FakeSession implements OhttpSession {
   final OhttpResponseData _response = OhttpResponseData(statusCode: 200, body: Uint8List(0));
@@ -402,6 +416,48 @@ void main() {
       final client = OhttpHttpClient(session: session, closeWith: raw);
 
       client.close();
+    });
+  });
+
+  group('OhttpHttpClient.create', () {
+    test('close() closes the underlying client', () {
+      final raw = _CloseTrackingClient();
+      final client = OhttpHttpClient.create(
+        client: raw,
+        keysUrl: Uri.parse(httpsKeysUrl),
+        gatewayUrl: Uri.parse(httpsGatewayUrl),
+      );
+
+      expect(raw.closeCallCount, 0);
+      client.close();
+      expect(raw.closeCallCount, 1);
+    });
+
+    test('wires transport, cache, and session into a working client', () async {
+      var keysUrlHit = false;
+      final mockClient = MockClient((req) async {
+        if (req.url.toString() == httpsKeysUrl) {
+          keysUrlHit = true;
+
+          return Response.bytes(validKeyConfig(), 200);
+        }
+
+        return Response.bytes(Uint8List(0), 200);
+      });
+
+      final client = OhttpHttpClient.create(
+        client: mockClient,
+        keysUrl: Uri.parse(httpsKeysUrl),
+        gatewayUrl: Uri.parse(httpsGatewayUrl),
+      );
+
+      // Decapsulation will fail (fake gateway response), but the key config
+      // fetch proves the wiring is correct.
+      await expectLater(
+        client.send(Request('GET', Uri.parse('https://example.com/'))),
+        throwsA(isA<OhttpException>()),
+      );
+      expect(keysUrlHit, isTrue);
     });
   });
 }

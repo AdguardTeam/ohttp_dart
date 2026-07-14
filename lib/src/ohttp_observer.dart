@@ -28,6 +28,17 @@ abstract class OhttpObserver {
   /// [errorType] is the runtime type of the exception (e.g. [OhttpUnsupportedSuiteException]).
   void onEncapsulationError(Type errorType) {}
 
+  /// Called when a gateway error triggers an automatic retry with a refreshed
+  /// key config. Fired after [onGatewayError] and [onCacheInvalidated], before the second attempt.
+  void onGatewayRetry() {}
+
+  /// Called after a successful round trip, just before the response is returned.
+  ///
+  /// [elapsed] covers the full [OhttpSession.send] call: BHTTP serialisation,
+  /// encapsulation, gateway POST (plus retry if it happened), decapsulation,
+  /// and BHTTP parsing. Not fired when [OhttpSession.send] throws.
+  void onRoundTripCompleted(Duration elapsed) {}
+
   /// Calls [callback] with this observer and suppresses any errors.
   void notifySafe(void Function(OhttpObserver) callback) {
     try {

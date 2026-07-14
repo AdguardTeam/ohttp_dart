@@ -11,6 +11,7 @@ class _RecordingObserver extends OhttpObserver {
   Type? lastDecapsulationError;
   int? lastGatewayError;
   Type? lastEncapsulationError;
+  Duration? lastRoundTripElapsed;
 
   @override
   void onKeyConfigFetched() => events.add('fetched');
@@ -41,6 +42,15 @@ class _RecordingObserver extends OhttpObserver {
 
   @override
   void onCacheInvalidated() => events.add('cacheInvalidated');
+
+  @override
+  void onGatewayRetry() => events.add('gatewayRetry');
+
+  @override
+  void onRoundTripCompleted(Duration elapsed) {
+    events.add('roundTripCompleted');
+    lastRoundTripElapsed = elapsed;
+  }
 }
 
 /// Observer that throws from every callback.
@@ -65,6 +75,12 @@ class _ThrowingObserver extends OhttpObserver {
 
   @override
   void onEncapsulationError(Type errorType) => throw Exception('fail');
+
+  @override
+  void onGatewayRetry() => throw Exception('fail');
+
+  @override
+  void onRoundTripCompleted(Duration elapsed) => throw Exception('fail');
 }
 
 /// KeyConfigCache subclass that returns a config with unsupported KDF/AEAD,
@@ -185,6 +201,34 @@ void main() {
       await expectLater(s.send(request), throwsA(isA<OhttpUnsupportedSuiteException>()));
       expect(observer.events, contains('encapsulationError'));
       expect(observer.lastEncapsulationError, OhttpUnsupportedSuiteException);
+    });
+
+    test('onGatewayRetry is called on retry', () async {
+      final s = makeSession();
+      transport.postError = const OhttpGatewayException(statusCode: 502, message: 'bad gateway');
+
+      await expectLater(s.send(request), throwsA(isA<OhttpGatewayException>()));
+      expect(observer.events, contains('gatewayRetry'));
+    });
+
+    test('onGatewayRetry is not called when retryOnGatewayError is false', () async {
+      final s = OhttpSession(
+        transport: transport,
+        cache: KeyConfigCache(transport: transport, observer: observer),
+        observer: observer,
+        retryOnGatewayError: false,
+      );
+      transport.postError = const OhttpGatewayException(statusCode: 502, message: 'bad gateway');
+
+      await expectLater(s.send(request), throwsA(isA<OhttpGatewayException>()));
+      expect(observer.events, isNot(contains('gatewayRetry')));
+    });
+
+    test('onRoundTripCompleted is not called when send fails', () async {
+      // Fake transport returns garbage bytes → decapsulation fails.
+      // onRoundTripCompleted must NOT fire on error paths.
+      await expectLater(makeSession().send(request), throwsA(isA<OhttpException>()));
+      expect(observer.events, isNot(contains('roundTripCompleted')));
     });
   });
   group('KeyConfigCache with observer', () {

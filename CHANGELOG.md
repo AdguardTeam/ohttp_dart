@@ -1,3 +1,12 @@
+## 0.3.0
+
+- Added automatic retry on gateway errors with key rotation in `OhttpSession` (`retryOnGatewayError`, default `true`).
+- Added `OhttpHttpClient.create()` factory.
+- Added `onGatewayRetry()` observer event (fired when a gateway error triggers retry).
+- Added `onRoundTripCompleted(Duration elapsed)` observer event (fired after a successful round trip only).
+- Added `OhttpConstants` — centralized default values replacing scattered private constants.
+- Added tests for retry behavior, observer events, `OhttpHttpClient.create()` wiring, and pipeline observers.
+
 ## 0.2.0
 
 ### Breaking changes

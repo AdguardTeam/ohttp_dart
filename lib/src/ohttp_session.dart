@@ -5,6 +5,7 @@ import 'bhttp_response_limits.dart';
 import 'exceptions.dart';
 import 'key_config_cache.dart';
 import 'ohttp.dart';
+import 'ohttp_constants.dart';
 import 'ohttp_data.dart';
 import 'ohttp_observer.dart';
 import 'ohttp_transport.dart';
@@ -20,6 +21,11 @@ import 'ohttp_transport.dart';
 /// Other exceptions (network errors, decapsulation failures) are
 /// propagated without invalidating the cache.
 ///
+/// When [retryOnGatewayError] is `true` (the default), a single automatic
+/// retry is performed after an [OhttpGatewayException]: the cache is
+/// invalidated, a fresh config is fetched, and the request is re-sent once.
+/// If the retry also fails, the exception is propagated.
+///
 /// [maxEncryptedResponseBytes] limits the maximum size of raw encrypted
 /// responses accepted from the gateway. Defaults to 16 MiB (higher than
 /// the max decrypted body size to account for OHTTP and BHTTP overhead).
@@ -28,14 +34,9 @@ import 'ohttp_transport.dart';
 /// [decryptedResponseLimits] control size validation for BHTTP response
 /// message components (headers, body) after decryption.
 ///
-/// [observer] receives lifecycle event notifications
+/// [observer] receives lifecycle event notifications.
 ///
 class OhttpSession {
-  /// Default limit for raw encrypted response from the gateway.
-  /// Set to 16 MiB — max BHTTP body (10 MiB) plus OHTTP/BHTTP overhead
-  /// (nonce, AEAD tag, framing, headers).
-  static const _defaultMaxEncryptedResponseBytes = 16 * 1024 * 1024; // 16 MiB
-
   static int _validateMaxEncryptedResponseBytes(int value) {
     if (value <= 0) {
       throw OhttpConfigException(
@@ -69,6 +70,7 @@ class OhttpSession {
   final int _maxEncryptedResponseBytes;
   final BhttpResponseLimits _decryptedResponseLimits;
   final OhttpObserver? _observer;
+  final bool _retryOnGatewayError;
 
   /// The [cache] must be backed by the same [transport] instance so that
   /// cache invalidation and gateway requests target the same gateway.
@@ -76,30 +78,37 @@ class OhttpSession {
     required OhttpTransport transport,
     required KeyConfigCache cache,
     OhttpObserver? observer,
-    int maxEncryptedResponseBytes = _defaultMaxEncryptedResponseBytes,
+    bool retryOnGatewayError = true,
+    int maxEncryptedResponseBytes = OhttpConstants.defaultMaxEncryptedResponseBytes,
     BhttpResponseLimits decryptedResponseLimits = const BhttpResponseLimits(),
   }) : _transport = transport,
        _cache = cache,
        _maxEncryptedResponseBytes = _validateMaxEncryptedResponseBytes(maxEncryptedResponseBytes),
        _decryptedResponseLimits = _validateDecryptedResponseLimits(decryptedResponseLimits),
-       _observer = observer;
+       _observer = observer,
+       _retryOnGatewayError = retryOnGatewayError;
 
   /// Shortcut that creates a [KeyConfigCache] over [transport] with the
   /// default TTL.
   OhttpSession.withTransport({
     required OhttpTransport transport,
     OhttpObserver? observer,
-    int maxEncryptedResponseBytes = _defaultMaxEncryptedResponseBytes,
+    bool retryOnGatewayError = true,
+    int maxEncryptedResponseBytes = OhttpConstants.defaultMaxEncryptedResponseBytes,
     BhttpResponseLimits decryptedResponseLimits = const BhttpResponseLimits(),
   }) : _transport = transport,
        _cache = KeyConfigCache(transport: transport, observer: observer),
        _maxEncryptedResponseBytes = _validateMaxEncryptedResponseBytes(maxEncryptedResponseBytes),
        _decryptedResponseLimits = _validateDecryptedResponseLimits(decryptedResponseLimits),
-       _observer = observer;
+       _observer = observer,
+       _retryOnGatewayError = retryOnGatewayError;
 
   /// Executes a full OHTTP round trip for [request].
+  ///
+  /// When [retryOnGatewayError] is `true`, a [OhttpGatewayException] triggers
+  /// a single retry with a freshly fetched key config.
   Future<OhttpResponseData> send(OhttpRequestData request) async {
-    final config = await _cache.get();
+    final stopwatch = _observer != null ? (Stopwatch()..start()) : null;
 
     final binaryRequest = bhttp.serializeRequest(
       method: request.method,
@@ -110,6 +119,30 @@ class OhttpSession {
       body: request.body,
     );
 
+    final config = await _cache.get();
+    OhttpResponseData result;
+    try {
+      result = await _encapsulateAndSend(binaryRequest, config);
+    } on OhttpGatewayException {
+      if (!_retryOnGatewayError) {
+        rethrow;
+      }
+      _observer?.notifySafe((o) => o.onGatewayRetry());
+      final newConfig = await _cache.get();
+      result = await _encapsulateAndSend(binaryRequest, newConfig);
+    }
+
+    if (stopwatch != null) {
+      stopwatch.stop();
+      _observer?.notifySafe((o) => o.onRoundTripCompleted(stopwatch.elapsed));
+    }
+
+    return result;
+  }
+
+  /// Encapsulates, posts, decapsulates, and parses one round-trip;
+  /// on gateway error invalidates cache and rethrows.
+  Future<OhttpResponseData> _encapsulateAndSend(Uint8List binaryRequest, OhttpKeyConfig config) async {
     OhttpEncapsulateResult encapsulated;
     try {
       encapsulated = await ohttpEncapsulate(config, binaryRequest);

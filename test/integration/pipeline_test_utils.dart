@@ -22,9 +22,11 @@ final class PipelineTestObserver extends OhttpObserver {
   bool cacheInvalidated = false;
   bool decapsulationError = false;
   bool encapsulationError = false;
+  bool roundTripCompleted = false;
   int? lastGatewayErrorStatus;
   Type? lastDecapsulationErrorType;
   Type? lastEncapsulationErrorType;
+  Duration? lastRoundTripElapsed;
 
   @override
   void onKeyConfigFetched() => keyConfigFetched = true;
@@ -54,6 +56,12 @@ final class PipelineTestObserver extends OhttpObserver {
   void onEncapsulationError(Type errorType) {
     encapsulationError = true;
     lastEncapsulationErrorType = errorType;
+  }
+
+  @override
+  void onRoundTripCompleted(Duration elapsed) {
+    roundTripCompleted = true;
+    lastRoundTripElapsed = elapsed;
   }
 }
 

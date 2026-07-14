@@ -26,7 +26,21 @@ Future<void> main() async {
   client.close();
 
   // ---------------------------------------------------------------------------
-  // 2. Low-level: OhttpSession.send (for Dio or custom adapters)
+  // 2. One-liner: OhttpHttpClient.create (factory)
+  // ---------------------------------------------------------------------------
+
+  final factoryClient = OhttpHttpClient.create(
+    client: http.Client(),
+    keysUrl: Uri.parse('https://gateway.example.com/ohttp/config'),
+    gatewayUrl: Uri.parse('https://gateway.example.com/ohttp/gateway'),
+  );
+  final factoryResponse = await factoryClient.get(Uri.https('target.example.com', '/api/data'));
+  print('OhttpHttpClient.create: ${factoryResponse.statusCode}');
+
+  factoryClient.close();
+
+  // ---------------------------------------------------------------------------
+  // 3. Low-level: OhttpSession.send (for Dio or custom adapters)
   // ---------------------------------------------------------------------------
 
   final lowLevelSession = OhttpSession.withTransport(transport: transport);
