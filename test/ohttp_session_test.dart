@@ -17,12 +17,18 @@ class _FakeTransport implements OhttpTransport {
 
   Uint8List? lastPostBody;
 
+  /// When set, [fetchKeyConfig] throws this instead of succeeding.
+  Object? fetchError;
+
   /// When set, [postToGateway] throws this instead of succeeding.
   Object? postError;
 
   @override
   Future<Uint8List> fetchKeyConfig() async {
     fetchCount++;
+    if (fetchError != null) {
+      throw fetchError!;
+    }
 
     return config;
   }
@@ -38,6 +44,14 @@ class _FakeTransport implements OhttpTransport {
     // Return configured response body or arbitrary bytes.
     return responseBody ?? Uint8List(64);
   }
+}
+
+/// Observer that records whether [onGatewayRetry] was called.
+class _RetryObserver extends OhttpObserver {
+  int retryCount = 0;
+
+  @override
+  void onGatewayRetry() => retryCount++;
 }
 
 void main() {
@@ -437,6 +451,27 @@ void main() {
         throwsA(isA<OhttpNetworkException>()),
       );
       expect(transport.postCount, 1); // no retry for non-gateway errors
+    });
+
+    test('does not retry when keys endpoint returns an error', () async {
+      // A failing key-config fetch (keys endpoint down) must NOT be treated
+      // as a gateway POST error — no retry, no onGatewayRetry.
+      transport.fetchError = const OhttpGatewayException(statusCode: 503, message: 'keys endpoint down');
+      final observer = _RetryObserver();
+      final s = OhttpSession(
+        transport: transport,
+        cache: KeyConfigCache(transport: transport),
+        observer: observer,
+        retryOnGatewayError: true,
+      );
+
+      await expectLater(
+        s.send(request),
+        throwsA(isA<OhttpGatewayException>()),
+      );
+      expect(transport.fetchCount, 1); // exactly one fetch attempt
+      expect(transport.postCount, 0); // never reached the gateway
+      expect(observer.retryCount, 0); // no retry fired
     });
   });
 

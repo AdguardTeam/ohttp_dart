@@ -108,6 +108,8 @@ class OhttpSession {
   /// When [retryOnGatewayError] is `true`, a [OhttpGatewayException] triggers
   /// a single retry with a freshly fetched key config.
   Future<OhttpResponseData> send(OhttpRequestData request) async {
+    final stopwatch = Stopwatch()..start();
+
     final binaryRequest = bhttp.serializeRequest(
       method: request.method,
       scheme: request.scheme,
@@ -117,17 +119,17 @@ class OhttpSession {
       body: request.body,
     );
 
-    final stopwatch = Stopwatch()..start();
-
+    final config = await _cache.get();
     OhttpResponseData result;
     try {
-      result = await _encapsulateAndSend(binaryRequest);
+      result = await _encapsulateAndSend(binaryRequest, config);
     } on OhttpGatewayException {
       if (!_retryOnGatewayError) {
         rethrow;
       }
       _observer?.notifySafe((o) => o.onGatewayRetry());
-      result = await _encapsulateAndSend(binaryRequest);
+      final newConfig = await _cache.get();
+      result = await _encapsulateAndSend(binaryRequest, newConfig);
     }
 
     stopwatch.stop();
@@ -138,9 +140,7 @@ class OhttpSession {
 
   /// Encapsulates, posts, decapsulates, and parses one round-trip;
   /// on gateway error invalidates cache and rethrows.
-  Future<OhttpResponseData> _encapsulateAndSend(Uint8List binaryRequest) async {
-    final config = await _cache.get();
-
+  Future<OhttpResponseData> _encapsulateAndSend(Uint8List binaryRequest, OhttpKeyConfig config) async {
     OhttpEncapsulateResult encapsulated;
     try {
       encapsulated = await ohttpEncapsulate(config, binaryRequest);

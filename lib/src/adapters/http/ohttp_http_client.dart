@@ -39,7 +39,10 @@ class OhttpHttpClient extends BaseClient {
   }) : _session = session,
        _closeWith = closeWith;
 
-  /// Creates a fully wired [OhttpHttpClient], constructing all internal components from raw parameters.
+  /// Creates a fully wired [OhttpHttpClient] from raw parameters.
+  ///
+  /// The factory owns [client] — [close] closes it. For shared ownership,
+  /// use the manual constructor instead.
   factory OhttpHttpClient.create({
     required Client client,
     required Uri keysUrl,
@@ -73,7 +76,7 @@ class OhttpHttpClient extends BaseClient {
       decryptedResponseLimits: decryptedResponseLimits,
     );
 
-    return OhttpHttpClient(session: session);
+    return OhttpHttpClient(session: session, closeWith: client);
   }
 
   @override

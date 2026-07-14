@@ -220,6 +220,56 @@ void main() {
       expect(keysGetCount, 2, reason: 'cache invalidation must trigger a second GET to keysUrl');
     });
 
+    test('retry succeeds after key rotation: first POST 503, second POST 200', () async {
+      final keyConfigBytes = defaultKeyConfigBytes();
+      final bhttpResponseBytes = buildBhttpResponse(utf8.encode('recovered'));
+      var keysGetCount = 0;
+      var gatewayPostCount = 0;
+
+      final mockClient = MockClient((request) async {
+        if (request.method == 'GET' && request.url.toString() == testKeysUrl) {
+          keysGetCount++;
+
+          return Response.bytes(keyConfigBytes, 200);
+        }
+        if (request.method == 'POST' && request.url.toString() == testGatewayUrl) {
+          gatewayPostCount++;
+          if (gatewayPostCount == 1) {
+            return Response('', 503);
+          }
+
+          return gatewayHandlerFor(request, bhttpResponseBytes);
+        }
+
+        return Response('Not found', 404);
+      });
+
+      final observer = PipelineTestObserver();
+      final transport = HttpClientTransport.insecureForTesting(
+        client: mockClient,
+        keysUrl: Uri.parse(testKeysUrl),
+        gatewayUrl: Uri.parse(testGatewayUrl),
+      );
+      final client = OhttpHttpClient(
+        session: OhttpSession.withTransport(
+          transport: transport,
+          observer: observer,
+        ),
+      );
+
+      final response = await client.send(Request('GET', Uri.parse('https://example.com/')));
+      final body = await response.stream.toBytes();
+
+      expect(response.statusCode, 200);
+      expect(utf8.decode(body), 'recovered');
+      expect(gatewayPostCount, 2, reason: 'first attempt failed with 503, second succeeded');
+      expect(keysGetCount, 2, reason: 'keys re-fetched after cache invalidation');
+      expect(observer.gatewayError, isTrue);
+      expect(observer.lastGatewayErrorStatus, 503);
+      expect(observer.cacheInvalidated, isTrue);
+      expect(observer.roundTripCompleted, isTrue);
+    });
+
     test('flipped ciphertext byte throws OhttpCryptoException', () async {
       final keyConfigBytes = defaultKeyConfigBytes();
       final mockClient = buildMockClient(
