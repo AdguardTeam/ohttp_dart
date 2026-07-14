@@ -462,7 +462,6 @@ void main() {
         transport: transport,
         cache: KeyConfigCache(transport: transport),
         observer: observer,
-        retryOnGatewayError: true,
       );
 
       await expectLater(
