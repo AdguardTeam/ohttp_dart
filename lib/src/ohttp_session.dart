@@ -108,7 +108,7 @@ class OhttpSession {
   /// When [retryOnGatewayError] is `true`, a [OhttpGatewayException] triggers
   /// a single retry with a freshly fetched key config.
   Future<OhttpResponseData> send(OhttpRequestData request) async {
-    final stopwatch = Stopwatch()..start();
+    final stopwatch = _observer != null ? (Stopwatch()..start()) : null;
 
     final binaryRequest = bhttp.serializeRequest(
       method: request.method,
@@ -132,8 +132,10 @@ class OhttpSession {
       result = await _encapsulateAndSend(binaryRequest, newConfig);
     }
 
-    stopwatch.stop();
-    _observer?.notifySafe((o) => o.onRoundTripCompleted(stopwatch.elapsed));
+    if (stopwatch != null) {
+      stopwatch.stop();
+      _observer?.notifySafe((o) => o.onRoundTripCompleted(stopwatch.elapsed));
+    }
 
     return result;
   }
