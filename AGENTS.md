@@ -68,8 +68,16 @@ ohttp_dart/
 │   │   └── pipeline_test_utils.dart        # Shared integration helpers
 │   └── stubs/
 │       └── gateway_stub.dart               # In-memory gateway stub
-├── example/                               # Usage examples
-│   └── ohttp_dart_example.dart
+├── example/                             # Flutter demo app: OHTTP vs. direct HTTP
+│   ├── lib/
+│   │   ├── main.dart                     # Two-path demo UI + state (OHTTP + direct)
+│   │   └── src/
+│   │       ├── gateways.dart             # HttpClientTransport gateway presets
+│   │       └── log_observer.dart         # OhttpObserver -> on-screen log
+│   ├── integration_test/                 # On-device integration tests (live network)
+│   ├── test/                             # Widget tests
+│   ├── android/, ios/, macos/, windows/  # Platform scaffolding
+│   └── pubspec.yaml                      # Depends on ohttp_dart via path: ../
 └── analysis_options.yaml                  # Linter rules, DCM config, formatter settings
 ```
 
