@@ -3,11 +3,17 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:ohttp_dart/ohttp_dart.dart';
 import 'package:ohttp_dart/http.dart';
+import 'package:ohttp_dart/ohttp_dart.dart';
 
+import 'src/compare_view.dart';
 import 'src/gateways.dart';
+import 'src/log_entry.dart';
 import 'src/log_observer.dart';
+import 'src/log_panel.dart';
+import 'src/path_defaults.dart';
+import 'src/privacy_facts.dart';
+import 'src/response_view.dart';
 
 void main() {
   runApp(const OhttpApp());
@@ -36,18 +42,16 @@ class OhttpDemoPage extends StatefulWidget {
   State<OhttpDemoPage> createState() => _OhttpDemoPageState();
 }
 
-class _OhttpDemoPageState extends State<OhttpDemoPage> {
-  final _pathController = TextEditingController(text: '/get');
-  final _bodyController = TextEditingController();
-  String _method = 'GET';
-  bool _loading = false;
-  final List<String> _logs = [];
-  OhttpResponseData? _ohttpResponse;
-  OhttpResponseData? _directResponse;
-
-  late http.Client _rawClient;
-  late OhttpSession _session;
-  String _authority = httpbinAuthority;
+class _OhttpDemoPageState extends State<OhttpDemoPage>
+    with SingleTickerProviderStateMixin {
+  static const _methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
+  static const _presetPaths = [
+    '/headers',
+    '/ip',
+    '/status/500',
+    '/delay/2',
+    '/anything',
+  ];
 
   // Gateway presets
   static final _gateways =
@@ -58,11 +62,30 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> {
           String authority,
         })
       >{'httpbin': (transport: httpbinTransport, authority: httpbinAuthority)};
+
+  final _pathController = TextEditingController(
+    text: methodDefaultPaths['GET'],
+  );
+  final _bodyController = TextEditingController();
+  String _method = 'GET';
+  bool _loading = false;
+  final List<LogEntry> _logEntries = [];
+  OhttpResponseData? _ohttpResponse;
+  OhttpResponseData? _directResponse;
+  Duration? _ohttpElapsed;
+  Duration? _directElapsed;
+
+  late final TabController _tabController;
+  late http.Client _rawClient;
+  late KeyConfigCache _cache;
+  late OhttpSession _session;
+  String _authority = httpbinAuthority;
   String _selectedGateway = 'httpbin';
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
     _initSession('httpbin');
   }
 
@@ -70,15 +93,21 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> {
     _rawClient = http.Client();
     final entry = _gateways[name]!;
     _authority = entry.authority;
-    final observer = LogObserver(_logs);
-    _session = OhttpSession.withTransport(
-      transport: entry.transport(_rawClient),
+    final observer = LogObserver(
+      (level, message) => _addEntry(level, 'OHTTP', message),
+    );
+    final transport = entry.transport(_rawClient);
+    _cache = KeyConfigCache(transport: transport, observer: observer);
+    _session = OhttpSession(
+      transport: transport,
+      cache: _cache,
       observer: observer,
     );
   }
 
   @override
   void dispose() {
+    _tabController.dispose();
     _pathController.dispose();
     _bodyController.dispose();
     _rawClient.close();
@@ -93,51 +122,67 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> {
       _initSession(name);
       _ohttpResponse = null;
       _directResponse = null;
-      _logs.clear();
-      // Set sensible default path for each gateway
-      if (name == 'httpbin') {
-        _pathController.text = '/get';
-      }
+      _ohttpElapsed = null;
+      _directElapsed = null;
+      _logEntries.clear();
+      _pathController.text = methodDefaultPaths[_method]!;
     });
   }
 
-  void _addLog(String msg) {
+  void _onMethodChanged(String? method) {
+    if (method == null) return;
     setState(() {
-      _logs.add('[${DateTime.now().toIso8601String().substring(11, 19)}] $msg');
+      _pathController.text = syncedPath(_pathController.text, method);
+      _method = method;
     });
   }
+
+  void _addEntry(LogLevel level, String source, String message) {
+    if (!mounted) return;
+    setState(() {
+      _logEntries.add(
+        LogEntry(
+          time: DateTime.now(),
+          level: level,
+          source: source,
+          message: message,
+        ),
+      );
+    });
+  }
+
+  Uint8List _ohttpBody() => _method != 'GET' && _bodyController.text.isNotEmpty
+      ? Uint8List.fromList(utf8.encode(_bodyController.text))
+      : Uint8List(0);
 
   Future<void> _sendOhttp() async {
     setState(() {
       _loading = true;
-      _logs.clear();
       _ohttpResponse = null;
+      _ohttpElapsed = null;
     });
 
     try {
-      final body = _method != 'GET' && _bodyController.text.isNotEmpty
-          ? Uint8List.fromList(utf8.encode(_bodyController.text))
-          : Uint8List(0);
-
-      final headers = <(String, String)>[('accept', 'application/json')];
-
       final requestData = OhttpRequestData(
         method: _method,
         scheme: 'https',
         authority: _authority,
         path: _pathController.text,
-        headers: headers,
-        body: body,
+        headers: const [('accept', 'application/json')],
+        body: _ohttpBody(),
       );
 
+      final stopwatch = Stopwatch()..start();
       final response = await _session.send(requestData);
+      stopwatch.stop();
 
       setState(() {
         _ohttpResponse = response;
+        _ohttpElapsed = stopwatch.elapsed;
       });
-      _addLog('Done!');
+      _addEntry(LogLevel.success, 'OHTTP', 'Done: HTTP ${response.statusCode}');
     } catch (e) {
-      _addLog('ERROR: $e');
+      _addEntry(LogLevel.error, 'OHTTP', 'ERROR: $e');
     } finally {
       setState(() {
         _loading = false;
@@ -148,33 +193,29 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> {
   Future<void> _sendDirect() async {
     setState(() {
       _loading = true;
-      _logs.clear();
       _directResponse = null;
+      _directElapsed = null;
     });
 
     try {
-      _addLog('Sending direct request...');
+      _addEntry(LogLevel.info, 'direct', 'Sending direct request...');
 
       final uri = Uri.https(_authority, _pathController.text);
-
-      http.Response response;
       final headers = <String, String>{'Accept': 'application/json'};
       final body = _method != 'GET' && _bodyController.text.isNotEmpty
           ? _bodyController.text
           : null;
 
-      switch (_method) {
-        case 'GET':
-          response = await _rawClient.get(uri, headers: headers);
-        case 'POST':
-          response = await _rawClient.post(uri, headers: headers, body: body);
-        case 'PUT':
-          response = await _rawClient.put(uri, headers: headers, body: body);
-        case 'DELETE':
-          response = await _rawClient.delete(uri, headers: headers);
-        default:
-          response = await _rawClient.get(uri, headers: headers);
-      }
+      final stopwatch = Stopwatch()..start();
+      final response = switch (_method) {
+        'GET' => await _rawClient.get(uri, headers: headers),
+        'POST' => await _rawClient.post(uri, headers: headers, body: body),
+        'PUT' => await _rawClient.put(uri, headers: headers, body: body),
+        'PATCH' => await _rawClient.patch(uri, headers: headers, body: body),
+        'DELETE' => await _rawClient.delete(uri, headers: headers, body: body),
+        _ => throw StateError('Unsupported method: $_method'),
+      };
+      stopwatch.stop();
 
       final responseData = OhttpResponseData(
         statusCode: response.statusCode,
@@ -184,15 +225,35 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> {
 
       setState(() {
         _directResponse = responseData;
+        _directElapsed = stopwatch.elapsed;
       });
-      _addLog('Direct response: HTTP ${responseData.statusCode}');
+      _addEntry(
+        LogLevel.success,
+        'direct',
+        'Direct response: HTTP ${responseData.statusCode}',
+      );
     } catch (e) {
-      _addLog('ERROR: $e');
+      _addEntry(LogLevel.error, 'direct', 'ERROR: $e');
     } finally {
       setState(() {
         _loading = false;
       });
     }
+  }
+
+  Future<void> _sendBoth() async {
+    await _sendOhttp();
+    await _sendDirect();
+    if (!mounted) return;
+    _tabController.animateTo(2);
+  }
+
+  PrivacyFacts? _factsOf(OhttpResponseData? response) {
+    if (response == null) return null;
+
+    return extractPrivacyFacts(
+      utf8.decode(response.body, allowMalformed: true),
+    );
   }
 
   @override
@@ -207,7 +268,7 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Gateway selector
+            // Gateway selector + key-rotation demo action
             Row(
               children: [
                 const Text(
@@ -225,6 +286,12 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> {
                       .toList(),
                   onChanged: _loading ? null : _onGatewayChanged,
                 ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.key_off),
+                  tooltip: 'Invalidate cached key config',
+                  onPressed: _loading ? null : _cache.invalidate,
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -234,10 +301,10 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> {
               children: [
                 DropdownButton<String>(
                   value: _method,
-                  items: ['GET', 'POST', 'PUT', 'DELETE']
+                  items: _methods
                       .map((m) => DropdownMenuItem(value: m, child: Text(m)))
                       .toList(),
-                  onChanged: (v) => setState(() => _method = v!),
+                  onChanged: _loading ? null : _onMethodChanged,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -255,8 +322,27 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> {
             ),
             const SizedBox(height: 8),
 
-            // Body field (for POST)
-            if (_method != 'GET')
+            // Preset paths for demoing specific behaviors
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final preset in _presetPaths) ...[
+                    ActionChip(
+                      label: Text(preset),
+                      onPressed: _loading
+                          ? null
+                          : () => setState(() => _pathController.text = preset),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // Body field (for methods that send one)
+            if (_method != 'GET') ...[
               TextField(
                 controller: _bodyController,
                 decoration: const InputDecoration(
@@ -266,9 +352,10 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> {
                 ),
                 maxLines: 2,
               ),
-            if (_method != 'GET') const SizedBox(height: 8),
+              const SizedBox(height: 8),
+            ],
 
-            // Buttons
+            // Send buttons
             Row(
               children: [
                 Expanded(
@@ -288,6 +375,12 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> {
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+            FilledButton.tonalIcon(
+              onPressed: _loading ? null : _sendBoth,
+              icon: const Icon(Icons.compare_arrows),
+              label: const Text('Send Both & Compare'),
+            ),
 
             if (_loading)
               const Padding(
@@ -297,113 +390,50 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> {
 
             const SizedBox(height: 12),
 
-            // Logs
-            if (_logs.isNotEmpty) ...[
-              const Text('Log:', style: TextStyle(fontWeight: FontWeight.bold)),
-              Container(
-                height: 100,
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: ListView(
-                  children: _logs
-                      .map(
-                        (l) => Text(
-                          l,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontFamily: 'monospace',
-                          ),
-                        ),
-                      )
-                      .toList(),
-                ),
+            if (_logEntries.isNotEmpty) ...[
+              LogPanel(
+                entries: _logEntries,
+                onClear: () => setState(_logEntries.clear),
               ),
               const SizedBox(height: 12),
             ],
 
-            // Response
+            // Response tabs
             Expanded(
-              child: DefaultTabController(
-                length: 2,
-                child: Column(
-                  children: [
-                    const TabBar(
-                      tabs: [
-                        Tab(text: 'OHTTP Response'),
-                        Tab(text: 'Direct Response'),
+              child: Column(
+                children: [
+                  TabBar(
+                    controller: _tabController,
+                    tabs: const [
+                      Tab(text: 'OHTTP Response'),
+                      Tab(text: 'Direct Response'),
+                      Tab(text: 'Compare'),
+                    ],
+                  ),
+                  Expanded(
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: [
+                        ResponseView(
+                          response: _ohttpResponse,
+                          elapsed: _ohttpElapsed,
+                        ),
+                        ResponseView(
+                          response: _directResponse,
+                          elapsed: _directElapsed,
+                        ),
+                        CompareView(
+                          ohttp: _factsOf(_ohttpResponse),
+                          direct: _factsOf(_directResponse),
+                        ),
                       ],
                     ),
-                    Expanded(
-                      child: TabBarView(
-                        children: [
-                          _buildResponseView(_ohttpResponse),
-                          _buildResponseView(_directResponse),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildResponseView(OhttpResponseData? response) {
-    if (response == null) {
-      return const Center(child: Text('No response yet'));
-    }
-
-    final bodyStr = utf8.decode(response.body, allowMalformed: true);
-    String formattedBody;
-    try {
-      final json = jsonDecode(bodyStr);
-      formattedBody = const JsonEncoder.withIndent('  ').convert(json);
-    } catch (_) {
-      formattedBody = bodyStr;
-    }
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Status: ${response.statusCode}',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: response.statusCode < 400 ? Colors.green : Colors.red,
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Text('Headers:', style: TextStyle(fontWeight: FontWeight.bold)),
-          ...response.headers.map(
-            (h) => Text(
-              '  ${h.$1}: ${h.$2}',
-              style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text('Body:', style: TextStyle(fontWeight: FontWeight.bold)),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.grey[50],
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: Colors.grey[300]!),
-            ),
-            child: SelectableText(
-              formattedBody,
-              style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-            ),
-          ),
-        ],
       ),
     );
   }
