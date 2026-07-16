@@ -2,9 +2,8 @@ import 'package:ohttp_dart/ohttp_dart.dart';
 
 /// An [OhttpObserver] that appends human-readable lifecycle events to a log.
 ///
-/// Use this to replace the old `onLog` callback pattern. Each event produces
-/// a string similar to the previous `OhttpClient` log output so that existing
-/// tests checking log contents continue to work.
+/// Overrides all nine [OhttpObserver] callbacks, appending one line per
+/// pipeline event to the shared [log] list for display in the UI.
 class LogObserver extends OhttpObserver {
   final List<String> log;
 
@@ -43,5 +42,15 @@ class LogObserver extends OhttpObserver {
   @override
   void onEncapsulationError(Type errorType) {
     log.add('Encapsulation error: $errorType');
+  }
+
+  @override
+  void onGatewayRetry() {
+    log.add('Retrying after gateway error');
+  }
+
+  @override
+  void onRoundTripCompleted(Duration elapsed) {
+    log.add('Round trip completed in $elapsed');
   }
 }

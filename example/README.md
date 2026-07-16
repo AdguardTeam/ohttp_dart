@@ -30,10 +30,11 @@ Flutter UI ──► OhttpSession ──► HttpClientTransport ──► OHTTP 
 | Component | Version |
 |-----------|---------|
 | Flutter | 3.41.4 (via `fvm`) |
-| Dart | 3.11.1 |
-| ohttp_dart | 0.1.0 (local, via `package:ohttp_dart`) |
+| Dart | ^3.11.1 |
+| ohttp_dart | 0.3.0 (local, via `package:ohttp_dart`) |
 | http | 1.6.0 |
-| cryptography (Flutter) | 2.9.0 / 2.3.4 |
+| cryptography | ^2.9.0 |
+| flutter_lints (dev) | ^6.0.0 |
 
 **Cipher suite:** DHKEM(X25519, HKDF-SHA256) + HKDF-SHA256 + AES-128-GCM
 
@@ -95,4 +96,4 @@ All cryptographic implementations (HPKE RFC 9180, BHTTP RFC 9292, OHTTP RFC 9458
 ## Limitations
 
 - **No relay** — client sends directly to the gateway (no privacy relay in between), sufficient for demo purposes
-- **Tested on macOS** — should work on all platforms (iOS, Android, Web) but not yet verified
+- **Tested on macOS** — should work on all platforms (iOS, Android, Windows) but not yet verified

@@ -6,6 +6,9 @@
 - Replaced the command-line `example/` with a Flutter demo app that showcases the OHTTP round trip
   (`OhttpSession` over `HttpClientTransport`) against a live gateway, side by side with a direct-HTTP path
   for comparison. The example now depends on the in-repo package via `path: ../`.
+- The Flutter example's on-screen log now surfaces the two `0.3.0` observer events — gateway retry
+  (`onGatewayRetry`) and round-trip timing (`onRoundTripCompleted`) — so the demo reflects the package's
+  auto-retry and round-trip-timing behavior instead of hiding it.
 
 ## 0.3.0
 
