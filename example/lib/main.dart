@@ -176,6 +176,7 @@ class _OhttpDemoPageState extends State<OhttpDemoPage>
       final response = await _session.send(requestData);
       stopwatch.stop();
 
+      if (!mounted) return;
       setState(() {
         _ohttpResponse = response;
         _ohttpElapsed = stopwatch.elapsed;
@@ -184,9 +185,11 @@ class _OhttpDemoPageState extends State<OhttpDemoPage>
     } catch (e) {
       _addEntry(LogLevel.error, 'OHTTP', 'ERROR: $e');
     } finally {
-      setState(() {
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -223,6 +226,7 @@ class _OhttpDemoPageState extends State<OhttpDemoPage>
         headers: response.headers.entries.map((e) => (e.key, e.value)).toList(),
       );
 
+      if (!mounted) return;
       setState(() {
         _directResponse = responseData;
         _directElapsed = stopwatch.elapsed;
@@ -235,9 +239,11 @@ class _OhttpDemoPageState extends State<OhttpDemoPage>
     } catch (e) {
       _addEntry(LogLevel.error, 'direct', 'ERROR: $e');
     } finally {
-      setState(() {
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
     }
   }
 
