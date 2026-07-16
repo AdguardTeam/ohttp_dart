@@ -45,10 +45,20 @@ lib/
 ├── main.dart                     # Flutter UI — OHTTP demo screen
 ├── src/
 │   ├── gateways.dart             # Gateway transport factories
-│   └── log_observer.dart         # OhttpObserver → UI log adapter
+│   ├── log_entry.dart            # Log entry model (level, source, message)
+│   ├── log_observer.dart         # OhttpObserver → typed log events
+│   ├── log_panel.dart            # Color-coded, auto-scrolling log list
+│   ├── json_highlighter.dart     # Dependency-free JSON syntax highlighting
+│   ├── path_defaults.dart        # Method → default echo path sync
+│   ├── privacy_facts.dart        # Echo-response privacy fact extraction
+│   ├── response_view.dart        # Status chip, meta line, highlighted body
+│   └── compare_view.dart         # OHTTP vs direct privacy comparison table
 integration_test/
 ├── simple_test.dart              # E2E: GET/POST via OHTTP, Direct, comparison
 test/
+├── json_highlighter_test.dart    # Span structure and palette tests
+├── path_defaults_test.dart       # Method↔path sync rule tests
+├── privacy_facts_test.dart       # Echo extraction tests
 └── widget_test.dart              # UI rendering tests
 ```
 
@@ -63,7 +73,7 @@ fvm flutter pub get
 # Run on macOS
 fvm flutter run -d macos
 
-# Run unit tests (38 tests)
+# Run unit tests
 fvm flutter test
 
 # Run integration tests (requires network)
