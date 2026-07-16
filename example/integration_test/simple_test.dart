@@ -33,7 +33,9 @@ void main() {
     final rawClient = http.Client();
     final transport = httpbinTransport(rawClient);
     final logs = <String>[];
-    final observer = LogObserver(logs);
+    final observer = LogObserver(
+      (level, message) => logs.add('[$level] $message'),
+    );
     final session = OhttpSession.withTransport(
       transport: transport,
       observer: observer,
@@ -95,7 +97,9 @@ void main() {
     final rawClient = http.Client();
     final transport = httpbinTransport(rawClient);
     final logs = <String>[];
-    final observer = LogObserver(logs);
+    final observer = LogObserver(
+      (level, message) => logs.add('[$level] $message'),
+    );
     final session = OhttpSession.withTransport(
       transport: transport,
       observer: observer,
@@ -141,7 +145,9 @@ void main() {
     final rawClient = http.Client();
     final transport = httpbinTransport(rawClient);
     final logs = <String>[];
-    final observer = LogObserver(logs);
+    final observer = LogObserver(
+      (level, message) => logs.add('[$level] $message'),
+    );
     final session = OhttpSession.withTransport(
       transport: transport,
       observer: observer,
