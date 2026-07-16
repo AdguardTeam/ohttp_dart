@@ -26,10 +26,7 @@ class OhttpApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'OHTTP Flutter Example',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
-        useMaterial3: true,
-      ),
+      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal), useMaterial3: true),
       home: const OhttpDemoPage(),
     );
   }
@@ -42,30 +39,16 @@ class OhttpDemoPage extends StatefulWidget {
   State<OhttpDemoPage> createState() => _OhttpDemoPageState();
 }
 
-class _OhttpDemoPageState extends State<OhttpDemoPage>
-    with SingleTickerProviderStateMixin {
+class _OhttpDemoPageState extends State<OhttpDemoPage> with SingleTickerProviderStateMixin {
   static const _methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
-  static const _presetPaths = [
-    '/headers',
-    '/ip',
-    '/status/500',
-    '/delay/2',
-    '/anything',
-  ];
+  static const _presetPaths = ['/headers', '/ip', '/status/500', '/delay/2', '/anything'];
 
   // Gateway presets
-  static final _gateways =
-      <
-        String,
-        ({
-          HttpClientTransport Function(http.Client client) transport,
-          String authority,
-        })
-      >{'httpbin': (transport: httpbinTransport, authority: httpbinAuthority)};
+  static final _gateways = <String, ({HttpClientTransport Function(http.Client client) transport, String authority})>{
+    'httpbin': (transport: httpbinTransport, authority: httpbinAuthority),
+  };
 
-  final _pathController = TextEditingController(
-    text: methodDefaultPaths['GET'],
-  );
+  final _pathController = TextEditingController(text: methodDefaultPaths['GET']);
   final _bodyController = TextEditingController();
   String _method = 'GET';
   bool _loading = false;
@@ -93,16 +76,10 @@ class _OhttpDemoPageState extends State<OhttpDemoPage>
     _rawClient = http.Client();
     final entry = _gateways[name]!;
     _authority = entry.authority;
-    final observer = LogObserver(
-      (level, message) => _addEntry(level, 'OHTTP', message),
-    );
+    final observer = LogObserver((level, message) => _addEntry(level, 'OHTTP', message));
     final transport = entry.transport(_rawClient);
     _cache = KeyConfigCache(transport: transport, observer: observer);
-    _session = OhttpSession(
-      transport: transport,
-      cache: _cache,
-      observer: observer,
-    );
+    _session = OhttpSession(transport: transport, cache: _cache, observer: observer);
   }
 
   @override
@@ -115,7 +92,9 @@ class _OhttpDemoPageState extends State<OhttpDemoPage>
   }
 
   void _onGatewayChanged(String? name) {
-    if (name == null) return;
+    if (name == null) {
+      return;
+    }
     _rawClient.close();
     setState(() {
       _selectedGateway = name;
@@ -130,7 +109,9 @@ class _OhttpDemoPageState extends State<OhttpDemoPage>
   }
 
   void _onMethodChanged(String? method) {
-    if (method == null) return;
+    if (method == null) {
+      return;
+    }
     setState(() {
       _pathController.text = syncedPath(_pathController.text, method);
       _method = method;
@@ -138,22 +119,17 @@ class _OhttpDemoPageState extends State<OhttpDemoPage>
   }
 
   void _addEntry(LogLevel level, String source, String message) {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     setState(() {
-      _logEntries.add(
-        LogEntry(
-          time: DateTime.now(),
-          level: level,
-          source: source,
-          message: message,
-        ),
-      );
+      _logEntries.add(LogEntry(time: DateTime.now(), level: level, source: source, message: message));
     });
   }
 
-  Uint8List _ohttpBody() => _method != 'GET' && _bodyController.text.isNotEmpty
-      ? Uint8List.fromList(utf8.encode(_bodyController.text))
-      : Uint8List(0);
+  bool get _hasBody => _method != 'GET' && _bodyController.text.isNotEmpty;
+
+  Uint8List _ohttpBody() => _hasBody ? Uint8List.fromList(utf8.encode(_bodyController.text)) : Uint8List(0);
 
   Future<void> _sendOhttp() async {
     setState(() {
@@ -176,7 +152,9 @@ class _OhttpDemoPageState extends State<OhttpDemoPage>
       final response = await _session.send(requestData);
       stopwatch.stop();
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _ohttpResponse = response;
         _ohttpElapsed = stopwatch.elapsed;
@@ -205,9 +183,7 @@ class _OhttpDemoPageState extends State<OhttpDemoPage>
 
       final uri = Uri.https(_authority, _pathController.text);
       final headers = <String, String>{'Accept': 'application/json'};
-      final body = _method != 'GET' && _bodyController.text.isNotEmpty
-          ? _bodyController.text
-          : null;
+      final body = _hasBody ? _bodyController.text : null;
 
       final stopwatch = Stopwatch()..start();
       final response = switch (_method) {
@@ -226,16 +202,14 @@ class _OhttpDemoPageState extends State<OhttpDemoPage>
         headers: response.headers.entries.map((e) => (e.key, e.value)).toList(),
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _directResponse = responseData;
         _directElapsed = stopwatch.elapsed;
       });
-      _addEntry(
-        LogLevel.success,
-        'direct',
-        'Direct response: HTTP ${responseData.statusCode}',
-      );
+      _addEntry(LogLevel.success, 'direct', 'Direct response: HTTP ${responseData.statusCode}');
     } catch (e) {
       _addEntry(LogLevel.error, 'direct', 'ERROR: $e');
     } finally {
@@ -249,17 +223,20 @@ class _OhttpDemoPageState extends State<OhttpDemoPage>
 
   Future<void> _sendBoth() async {
     await _sendOhttp();
+    if (!mounted) {
+      return;
+    }
     await _sendDirect();
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     _tabController.animateTo(2);
   }
 
   PrivacyFacts? _factsOf(OhttpResponseData? response) {
     if (response == null) return null;
 
-    return extractPrivacyFacts(
-      utf8.decode(response.body, allowMalformed: true),
-    );
+    return extractPrivacyFacts(utf8.decode(response.body, allowMalformed: true));
   }
 
   @override
@@ -277,19 +254,11 @@ class _OhttpDemoPageState extends State<OhttpDemoPage>
             // Gateway selector + key-rotation demo action
             Row(
               children: [
-                const Text(
-                  'Gateway: ',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
+                const Text('Gateway: ', style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(width: 8),
                 DropdownButton<String>(
                   value: _selectedGateway,
-                  items: _gateways.keys
-                      .map(
-                        (name) =>
-                            DropdownMenuItem(value: name, child: Text(name)),
-                      )
-                      .toList(),
+                  items: _gateways.keys.map((name) => DropdownMenuItem(value: name, child: Text(name))).toList(),
                   onChanged: _loading ? null : _onGatewayChanged,
                 ),
                 const Spacer(),
@@ -307,9 +276,7 @@ class _OhttpDemoPageState extends State<OhttpDemoPage>
               children: [
                 DropdownButton<String>(
                   value: _method,
-                  items: _methods
-                      .map((m) => DropdownMenuItem(value: m, child: Text(m)))
-                      .toList(),
+                  items: _methods.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
                   onChanged: _loading ? null : _onMethodChanged,
                 ),
                 const SizedBox(width: 12),
@@ -336,9 +303,7 @@ class _OhttpDemoPageState extends State<OhttpDemoPage>
                   for (final preset in _presetPaths) ...[
                     ActionChip(
                       label: Text(preset),
-                      onPressed: _loading
-                          ? null
-                          : () => setState(() => _pathController.text = preset),
+                      onPressed: _loading ? null : () => setState(() => _pathController.text = preset),
                     ),
                     const SizedBox(width: 8),
                   ],
@@ -388,19 +353,12 @@ class _OhttpDemoPageState extends State<OhttpDemoPage>
               label: const Text('Send Both & Compare'),
             ),
 
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: LinearProgressIndicator(),
-              ),
+            if (_loading) const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: LinearProgressIndicator()),
 
             const SizedBox(height: 12),
 
             if (_logEntries.isNotEmpty) ...[
-              LogPanel(
-                entries: _logEntries,
-                onClear: () => setState(_logEntries.clear),
-              ),
+              LogPanel(entries: _logEntries, onClear: () => setState(_logEntries.clear)),
               const SizedBox(height: 12),
             ],
 
@@ -420,18 +378,9 @@ class _OhttpDemoPageState extends State<OhttpDemoPage>
                     child: TabBarView(
                       controller: _tabController,
                       children: [
-                        ResponseView(
-                          response: _ohttpResponse,
-                          elapsed: _ohttpElapsed,
-                        ),
-                        ResponseView(
-                          response: _directResponse,
-                          elapsed: _directElapsed,
-                        ),
-                        CompareView(
-                          ohttp: _factsOf(_ohttpResponse),
-                          direct: _factsOf(_directResponse),
-                        ),
+                        ResponseView(response: _ohttpResponse, elapsed: _ohttpElapsed),
+                        ResponseView(response: _directResponse, elapsed: _directElapsed),
+                        CompareView(ohttp: _factsOf(_ohttpResponse), direct: _factsOf(_directResponse)),
                       ],
                     ),
                   ),

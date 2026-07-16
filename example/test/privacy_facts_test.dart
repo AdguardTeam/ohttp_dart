@@ -89,6 +89,19 @@ void main() {
     expect(facts.headerCount, 2);
   });
 
+  test('headerCount counts name-value occurrences equally in both shapes', () {
+    // Same logical header set: "a" repeated twice + single "b".
+    const pairList =
+        '{"headers":[["a","1"],["a","2"],["b","3"]],'
+        '"ip":null,"country":null,"body":""}';
+    const classic =
+        '{"headers":{"A":["1","2"],"B":"3"},'
+        '"origin":"","url":"https://httpbin.org/anything"}';
+
+    expect(extractPrivacyFacts(pairList)!.headerCount, 3);
+    expect(extractPrivacyFacts(classic)!.headerCount, 3);
+  });
+
   test('returns null for non-echo shapes', () {
     expect(extractPrivacyFacts('{"status":"ok"}'), isNull);
     expect(extractPrivacyFacts('[1,2,3]'), isNull);

@@ -1,6 +1,23 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:ohttp_flutter_example/main.dart';
+
+/// Fake client whose requests hang until the test completes [completer].
+class _FakeHttpClient extends http.BaseClient {
+  _FakeHttpClient(this.completer);
+
+  final Completer<http.StreamedResponse> completer;
+  int requestCount = 0;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    requestCount++;
+    return completer.future;
+  }
+}
 
 void main() {
   testWidgets('OHTTP demo page renders correctly', (WidgetTester tester) async {
@@ -26,5 +43,33 @@ void main() {
 
     // Default state
     expect(find.text('No response yet'), findsOneWidget);
+  });
+
+  testWidgets('Send Both does not touch state after page disposal', (
+    WidgetTester tester,
+  ) async {
+    final completer = Completer<http.StreamedResponse>();
+    final client = _FakeHttpClient(completer);
+
+    await http.runWithClient(() async {
+      await tester.pumpWidget(const OhttpApp());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Send Both & Compare'));
+      await tester.pump();
+
+      // Dispose the page while the OHTTP leg is still awaiting the network.
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+
+      completer.complete(
+        http.StreamedResponse(Stream.value(const <int>[]), 500),
+      );
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      // Only the OHTTP key-config fetch reached the network;
+      // the direct leg must not start after disposal.
+      expect(client.requestCount, 1);
+    }, () => client);
   });
 }

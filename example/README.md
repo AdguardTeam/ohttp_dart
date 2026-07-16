@@ -19,10 +19,10 @@ Flutter UI ──► OhttpSession ──► HttpClientTransport ──► OHTTP 
 
 **Flow:**
 
-1. `GET /ohttp/config` (или `/ohttp-configs`) — fetch gateway's KeyConfig (public key + HPKE params)
+1. `GET /ohttp/config` — fetch gateway's KeyConfig (public key + HPKE params)
 2. Serialize HTTP request to [BHTTP (RFC 9292)](https://www.ietf.org/rfc/rfc9292.html)
 3. Encrypt BHTTP message with [HPKE (RFC 9180)](https://www.ietf.org/rfc/rfc9180.html) using gateway's public key
-4. `POST /ohttp/gateway` (или `/ohttp-request`) — send encrypted request
+4. `POST /ohttp/gateway` — send encrypted request
 5. Decrypt and deserialize the response
 
 ## Tech Stack
@@ -33,8 +33,7 @@ Flutter UI ──► OhttpSession ──► HttpClientTransport ──► OHTTP 
 | Dart | ^3.11.1 |
 | ohttp_dart | 0.3.0 (local, via `package:ohttp_dart`) |
 | http | 1.6.0 |
-| cryptography | ^2.9.0 |
-| flutter_lints (dev) | ^6.0.0 |
+| flutter_lints (dev) | 6.0.0 |
 
 **Cipher suite:** DHKEM(X25519, HKDF-SHA256) + HKDF-SHA256 + AES-128-GCM
 

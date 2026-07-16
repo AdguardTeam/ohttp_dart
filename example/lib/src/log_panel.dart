@@ -20,6 +20,22 @@ class _LogPanelState extends State<LogPanel> {
   int _lastCount = 0;
 
   @override
+  void initState() {
+    super.initState();
+    _lastCount = widget.entries.length;
+    _scrollToEnd();
+  }
+
+  @override
+  void didUpdateWidget(LogPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.entries.length != _lastCount) {
+      _lastCount = widget.entries.length;
+      _scrollToEnd();
+    }
+  }
+
+  @override
   void dispose() {
     _scrollController.dispose();
     super.dispose();
@@ -47,11 +63,6 @@ class _LogPanelState extends State<LogPanel> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.entries.length != _lastCount) {
-      _lastCount = widget.entries.length;
-      _scrollToEnd();
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

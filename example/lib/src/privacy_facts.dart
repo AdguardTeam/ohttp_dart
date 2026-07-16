@@ -6,6 +6,9 @@ class PrivacyFacts {
   final String? ip;
   final String? country;
   final String? userAgent;
+
+  /// Number of header name-value occurrences the server received; a repeated
+  /// header counts once per value in both echo shapes.
   final int headerCount;
   final bool fingerprintPresent;
 
