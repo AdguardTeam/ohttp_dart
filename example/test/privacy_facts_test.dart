@@ -13,6 +13,32 @@ const _ohttpEcho =
     '"method":"GET","url":"https://httpbin.agrd.workers.dev/get",'
     '"ip":null,"country":null,"body":""}';
 
+// Classic httpbin shape returned by /anything: headers as a map of
+// name -> list of values, client info only in origin / Cf-* headers.
+const _classicDirectEcho =
+    '{"args":{},"headers":{'
+    '"Accept":["application/json"],'
+    '"Cf-connecting-ip":["203.0.113.7"],'
+    '"Cf-ipcountry":["GB"],'
+    '"User-agent":["Dart/3.11 (dart:io)"],'
+    '"X-real-ip":["203.0.113.7"]},'
+    '"method":"GET","origin":"",'
+    '"url":"https://httpbin.agrd.workers.dev/anything",'
+    '"data":null,"files":{},"form":{},"json":null}';
+
+const _classicOhttpEcho =
+    '{"args":{},"headers":{"Accept":["application/json"]},'
+    '"method":"GET","origin":"",'
+    '"url":"https://httpbin.agrd.workers.dev/anything",'
+    '"data":null,"files":{},"form":{},"json":null}';
+
+// httpbin.org flavor: header values are plain strings, origin is set.
+const _httpbinOrgEcho =
+    '{"args":{},"headers":{'
+    '"Accept":"application/json","User-Agent":"curl/8.7.1"},'
+    '"method":"GET","origin":"198.51.100.1",'
+    '"url":"https://httpbin.org/anything"}';
+
 void main() {
   test('extracts leaked facts from a direct echo response', () {
     final facts = extractPrivacyFacts(_directEcho);
@@ -32,6 +58,35 @@ void main() {
     expect(facts.userAgent, isNull);
     expect(facts.headerCount, 1);
     expect(facts.fingerprintPresent, isFalse);
+  });
+
+  test('extracts leaked facts from a classic httpbin direct echo', () {
+    final facts = extractPrivacyFacts(_classicDirectEcho);
+    expect(facts, isNotNull);
+    expect(facts!.ip, '203.0.113.7');
+    expect(facts.country, 'GB');
+    expect(facts.userAgent, 'Dart/3.11 (dart:io)');
+    expect(facts.headerCount, 5);
+    expect(facts.fingerprintPresent, isFalse);
+  });
+
+  test('extracts hidden facts from a classic httpbin OHTTP echo', () {
+    final facts = extractPrivacyFacts(_classicOhttpEcho);
+    expect(facts, isNotNull);
+    expect(facts!.ip, isNull);
+    expect(facts.country, isNull);
+    expect(facts.userAgent, isNull);
+    expect(facts.headerCount, 1);
+    expect(facts.fingerprintPresent, isFalse);
+  });
+
+  test('extracts facts from httpbin.org-style string header values', () {
+    final facts = extractPrivacyFacts(_httpbinOrgEcho);
+    expect(facts, isNotNull);
+    expect(facts!.ip, '198.51.100.1');
+    expect(facts.country, isNull);
+    expect(facts.userAgent, 'curl/8.7.1');
+    expect(facts.headerCount, 2);
   });
 
   test('returns null for non-echo shapes', () {
