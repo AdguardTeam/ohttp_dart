@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -42,6 +43,10 @@ class OhttpDemoPage extends StatefulWidget {
 class _OhttpDemoPageState extends State<OhttpDemoPage> with SingleTickerProviderStateMixin {
   static const _methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
   static const _presetPaths = ['/headers', '/ip', '/status/500', '/delay/2', '/anything'];
+
+  /// Smallest height the response tab section may take before the page
+  /// starts scrolling vertically instead of squeezing it further.
+  static const _minTabSectionHeight = 320.0;
 
   // Gateway presets
   static final _gateways = <String, ({HttpClientTransport Function(http.Client client) transport, String authority})>{
@@ -248,146 +253,170 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> with SingleTickerProvider
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Gateway selector + key-rotation demo action
-            Row(
-              children: [
-                const Text('Gateway: ', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(width: 8),
-                DropdownButton<String>(
-                  value: _selectedGateway,
-                  items: _gateways.keys.map((name) => DropdownMenuItem(value: name, child: Text(name))).toList(),
-                  onChanged: _loading ? null : _onGatewayChanged,
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.key_off),
-                  tooltip: 'Invalidate cached key config',
-                  onPressed: _loading ? null : _cache.invalidate,
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-
-            // Method + Path row
-            Row(
-              children: [
-                DropdownButton<String>(
-                  value: _method,
-                  items: _methods.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
-                  onChanged: _loading ? null : _onMethodChanged,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _pathController,
-                    decoration: const InputDecoration(
-                      labelText: 'Path',
-                      hintText: '/get',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-
-            // Preset paths for demoing specific behaviors
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (final preset in _presetPaths) ...[
-                    ActionChip(
-                      label: Text(preset),
-                      onPressed: _loading ? null : () => setState(() => _pathController.text = preset),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            // Body field (for methods that send one)
-            if (_method != 'GET') ...[
-              TextField(
-                controller: _bodyController,
-                decoration: const InputDecoration(
-                  labelText: 'Request Body',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                maxLines: 2,
-              ),
-              const SizedBox(height: 8),
-            ],
-
-            // Send buttons
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _loading ? null : _sendOhttp,
-                    icon: const Icon(Icons.lock),
-                    label: const Text('Send via OHTTP'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _loading ? null : _sendDirect,
-                    icon: const Icon(Icons.send),
-                    label: const Text('Send Direct'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            FilledButton.tonalIcon(
-              onPressed: _loading ? null : _sendBoth,
-              icon: const Icon(Icons.compare_arrows),
-              label: const Text('Send Both & Compare'),
-            ),
-
-            if (_loading) const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: LinearProgressIndicator()),
-
-            const SizedBox(height: 12),
-
-            if (_logEntries.isNotEmpty) ...[
-              LogPanel(entries: _logEntries, onClear: () => setState(_logEntries.clear)),
-              const SizedBox(height: 12),
-            ],
-
-            // Response tabs
-            Expanded(
-              child: Column(
-                children: [
-                  TabBar(
-                    controller: _tabController,
-                    tabs: const [
-                      Tab(text: 'OHTTP Response'),
-                      Tab(text: 'Direct Response'),
-                      Tab(text: 'Compare'),
-                    ],
-                  ),
-                  Expanded(
-                    child: TabBarView(
-                      controller: _tabController,
+        child: LayoutBuilder(
+          builder: (context, viewport) => CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Gateway selector + key-rotation demo action
+                    Row(
                       children: [
-                        ResponseView(response: _ohttpResponse, elapsed: _ohttpElapsed),
-                        ResponseView(response: _directResponse, elapsed: _directElapsed),
-                        CompareView(ohttp: _factsOf(_ohttpResponse), direct: _factsOf(_directResponse)),
+                        const Text('Gateway: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 8),
+                        DropdownButton<String>(
+                          value: _selectedGateway,
+                          items: _gateways.keys
+                              .map((name) => DropdownMenuItem(value: name, child: Text(name)))
+                              .toList(),
+                          onChanged: _loading ? null : _onGatewayChanged,
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.key_off),
+                          tooltip: 'Invalidate cached key config',
+                          onPressed: _loading ? null : _cache.invalidate,
+                        ),
                       ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+
+                    // Method + Path row
+                    Row(
+                      children: [
+                        DropdownButton<String>(
+                          value: _method,
+                          items: _methods.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                          onChanged: _loading ? null : _onMethodChanged,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: _pathController,
+                            decoration: const InputDecoration(
+                              labelText: 'Path',
+                              hintText: '/get',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Preset paths for demoing specific behaviors
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          for (final preset in _presetPaths) ...[
+                            ActionChip(
+                              label: Text(preset),
+                              onPressed: _loading ? null : () => setState(() => _pathController.text = preset),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Body field (for methods that send one)
+                    if (_method != 'GET') ...[
+                      TextField(
+                        controller: _bodyController,
+                        decoration: const InputDecoration(
+                          labelText: 'Request Body',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        maxLines: 2,
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+
+                    // Send buttons
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _loading ? null : _sendOhttp,
+                            icon: const Icon(Icons.lock),
+                            label: const Text('Send via OHTTP'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _loading ? null : _sendDirect,
+                            icon: const Icon(Icons.send),
+                            label: const Text('Send Direct'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    FilledButton.tonalIcon(
+                      onPressed: _loading ? null : _sendBoth,
+                      icon: const Icon(Icons.compare_arrows),
+                      label: const Text('Send Both & Compare'),
+                    ),
+
+                    if (_loading)
+                      const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: LinearProgressIndicator()),
+
+                    const SizedBox(height: 12),
+
+                    if (_logEntries.isNotEmpty) ...[
+                      LogPanel(entries: _logEntries, onClear: () => setState(_logEntries.clear)),
+                      const SizedBox(height: 12),
+                    ],
+                  ],
+                ),
               ),
-            ),
-          ],
+
+              // Response tabs: fill the viewport space left below the controls,
+              // but never shrink under a usable height — on short windows the
+              // page scrolls instead.
+              SliverLayoutBuilder(
+                builder: (context, constraints) {
+                  final tabHeight = math.max(
+                    _minTabSectionHeight,
+                    viewport.maxHeight - constraints.precedingScrollExtent,
+                  );
+                  return SliverToBoxAdapter(
+                    child: SizedBox(
+                      height: tabHeight,
+                      child: Column(
+                        children: [
+                          TabBar(
+                            controller: _tabController,
+                            tabs: const [
+                              Tab(text: 'OHTTP Response'),
+                              Tab(text: 'Direct Response'),
+                              Tab(text: 'Compare'),
+                            ],
+                          ),
+                          Expanded(
+                            child: TabBarView(
+                              controller: _tabController,
+                              children: [
+                                ResponseView(response: _ohttpResponse, elapsed: _ohttpElapsed),
+                                ResponseView(response: _directResponse, elapsed: _directElapsed),
+                                CompareView(ohttp: _factsOf(_ohttpResponse), direct: _factsOf(_directResponse)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );

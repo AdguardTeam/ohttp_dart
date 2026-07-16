@@ -45,6 +45,37 @@ void main() {
     expect(find.text('No response yet'), findsOneWidget);
   });
 
+  testWidgets('short window scrolls vertically instead of clipping', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 300);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const OhttpApp());
+    await tester.pumpAndSettle();
+
+    // A window shorter than the controls must not overflow the layout.
+    expect(tester.takeException(), isNull);
+
+    // The controls live inside a vertically scrollable page.
+    final pageScrollable = find.ancestor(
+      of: find.text('Send via OHTTP'),
+      matching: find.byType(Scrollable),
+    );
+    expect(pageScrollable, findsOneWidget);
+
+    // Content below the fold starts off-screen and is reachable by scrolling.
+    expect(find.text('No response yet').hitTestable(), findsNothing);
+    await tester.scrollUntilVisible(
+      find.text('No response yet').hitTestable(),
+      100,
+      scrollable: pageScrollable,
+    );
+    expect(find.text('No response yet').hitTestable(), findsOneWidget);
+  });
+
   testWidgets('Send Both does not touch state after page disposal', (
     WidgetTester tester,
   ) async {
