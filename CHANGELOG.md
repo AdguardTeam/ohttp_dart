@@ -1,4 +1,4 @@
-## Unreleased
+## 0.3.1
 
 - Raised the `meta` dependency constraint from an exact `1.16.0` pin to `1.17.0`, so the package resolves
   alongside the current Flutter `flutter_test` toolchain used by the example app. Consumers that pin `meta`

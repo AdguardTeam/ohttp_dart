@@ -31,7 +31,7 @@ Flutter UI ──► OhttpSession ──► HttpClientTransport ──► OHTTP 
 |-----------|---------|
 | Flutter | 3.41.4 (via `fvm`) |
 | Dart | ^3.11.1 |
-| ohttp_dart | 0.3.0 (local, via `package:ohttp_dart`) |
+| ohttp_dart | 0.3.1 (local, via `package:ohttp_dart`) |
 | http | 1.6.0 |
 | flutter_lints (dev) | 6.0.0 |
 
