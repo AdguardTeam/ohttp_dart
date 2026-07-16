@@ -60,6 +60,13 @@ void main() {
     expect(highlightJson('[]', colors).toPlainText(), '[]');
   });
 
+  test('renders bare top-level scalars', () {
+    expect(highlightJson('42', colors).toPlainText(), '42');
+    expect(highlightJson('"hi"', colors).toPlainText(), '"hi"');
+    expect(highlightJson('true', colors).toPlainText(), 'true');
+    expect(highlightJson('null', colors).toPlainText(), 'null');
+  });
+
   test('falls back to a single plain span for invalid JSON', () {
     final span = highlightJson('not json at all', colors);
     expect(span.children, isNull);

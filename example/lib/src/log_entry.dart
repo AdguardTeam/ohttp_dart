@@ -6,7 +6,7 @@ class LogEntry {
   final DateTime time;
   final LogLevel level;
 
-  /// Origin tag rendered in brackets: 'OHTTP', 'direct', or 'app'.
+  /// Origin tag rendered in brackets: 'OHTTP' or 'direct'.
   final String source;
   final String message;
 
