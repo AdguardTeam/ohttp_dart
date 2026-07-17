@@ -1,19 +1,13 @@
 ## 0.4.0
 
 - Added `OhttpRequestAbortedException` to the sealed `OhttpException` hierarchy — a sibling of
-  `OhttpNetworkException` (deliberately not a subtype) that preserves the original error in `cause` and the
-  captured stack trace in `stackTrace`. It is exported from the public API automatically via
-  `package:ohttp_dart/ohttp_dart.dart`.
+  `OhttpNetworkException` that preserves the original error in `cause` and the captured stack trace in `stackTrace`.
 - `HttpClientTransport.fetchKeyConfig()` and `postToGateway()` now throw `OhttpRequestAbortedException` instead
   of `OhttpNetworkException` when the underlying request is cancelled client-side
   (`http.RequestAbortedException`), so consumers can distinguish an intentional abort from a real network error
   with a plain `on OhttpRequestAbortedException`.
-- Because the new type is a sibling and not a subtype, existing `on OhttpNetworkException` handlers no longer
-  match a client-side cancellation (intentional).
 - Behavior of all other errors is unchanged: timeouts still throw `OhttpTimeoutException`, non-2xx responses
   still throw `OhttpGatewayException`, and other network errors still throw `OhttpNetworkException`.
-- A cancellation is not a gateway error, so it propagates transparently — no key-config cache invalidation and
-  no single retry.
 
 ## 0.3.0
 
