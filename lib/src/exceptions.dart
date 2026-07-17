@@ -132,15 +132,11 @@ class OhttpTimeoutException extends OhttpNetworkException {
   }
 }
 
-/// Thrown when an in-flight client request is intentionally cancelled/aborted
-/// (e.g. `http.RequestAbortedException`, raised when a consumer cancels an
-/// active request — such as on device lock during long polling).
+/// Thrown when an in-flight request is intentionally cancelled/aborted
+/// (e.g. `http.RequestAbortedException`).
 ///
-/// Deliberately **not** a subtype of [OhttpNetworkException]: keeping it a
-/// direct sibling ensures existing `on OhttpNetworkException` handlers do not
-/// swallow cancellations, so consumers can distinguish an intentional abort
-/// from a genuine network error with a plain `on OhttpRequestAbortedException`,
-/// without unwrapping [cause].
+/// Deliberately not an [OhttpNetworkException] subtype, so existing
+/// `on OhttpNetworkException` handlers don't swallow cancellations.
 class OhttpRequestAbortedException extends OhttpException {
   /// The original cancellation error (e.g. `http.RequestAbortedException`), if any.
   final Object? cause;

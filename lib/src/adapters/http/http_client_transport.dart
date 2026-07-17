@@ -102,10 +102,8 @@ class HttpClientTransport implements OhttpTransport {
         stackTrace: st,
       );
     } on http.RequestAbortedException catch (e, st) {
-      // Re-route intentional client-side cancellation to a distinct type so
-      // consumers can tell an expected abort from a real network error. Must
-      // sit above `on Exception`: RequestAbortedException extends
-      // ClientException (an Exception), so the reverse order would shadow it.
+      // Map an intentional cancellation to a distinct type. Must precede
+      // `on Exception` — RequestAbortedException is an Exception subtype.
       throw OhttpRequestAbortedException(
         'Request aborted while fetching KeyConfig',
         cause: e,
@@ -153,10 +151,8 @@ class HttpClientTransport implements OhttpTransport {
         stackTrace: st,
       );
     } on http.RequestAbortedException catch (e, st) {
-      // Re-route intentional client-side cancellation to a distinct type so
-      // consumers can tell an expected abort from a real network error. Must
-      // sit above `on Exception`: RequestAbortedException extends
-      // ClientException (an Exception), so the reverse order would shadow it.
+      // Map an intentional cancellation to a distinct type. Must precede
+      // `on Exception` — RequestAbortedException is an Exception subtype.
       throw OhttpRequestAbortedException(
         'Request aborted while posting to Gateway',
         cause: e,
