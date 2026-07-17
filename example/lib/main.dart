@@ -149,7 +149,10 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> with SingleTickerProvider
         scheme: 'https',
         authority: _authority,
         path: _pathController.text,
-        headers: const [('accept', 'application/json')],
+        headers: [
+          ('accept', 'application/json'),
+          if (_hasBody) ('content-type', 'application/json'),
+        ],
         body: _ohttpBody(),
       );
 
@@ -187,7 +190,10 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> with SingleTickerProvider
       _addEntry(LogLevel.info, 'direct', 'Sending direct request...');
 
       final uri = Uri.https(_authority, _pathController.text);
-      final headers = <String, String>{'Accept': 'application/json'};
+      final headers = <String, String>{
+        'Accept': 'application/json',
+        if (_hasBody) 'Content-Type': 'application/json',
+      };
       final body = _hasBody ? _bodyController.text : null;
 
       final stopwatch = Stopwatch()..start();
