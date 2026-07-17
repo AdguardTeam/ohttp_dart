@@ -60,6 +60,18 @@ void main() {
 
       expect(response.statusCode, 200);
 
+      expect(logs, isNotEmpty, reason: 'observer should emit lifecycle events');
+      expect(
+        logs.any((l) => l.contains('Sending to OHTTP gateway')),
+        isTrue,
+        reason: 'observer should report the gateway POST',
+      );
+      expect(
+        logs.any((l) => l.contains('Round trip completed')),
+        isTrue,
+        reason: 'observer should report a completed round trip',
+      );
+
       final body = jsonDecode(utf8.decode(response.body, allowMalformed: true));
       expect(body, isA<Map>());
       expect(body['url'], contains('/get'));
@@ -129,6 +141,18 @@ void main() {
 
       expect(response.statusCode, 200);
 
+      expect(logs, isNotEmpty, reason: 'observer should emit lifecycle events');
+      expect(
+        logs.any((l) => l.contains('Sending to OHTTP gateway')),
+        isTrue,
+        reason: 'observer should report the gateway POST',
+      );
+      expect(
+        logs.any((l) => l.contains('Round trip completed')),
+        isTrue,
+        reason: 'observer should report a completed round trip',
+      );
+
       final body = jsonDecode(utf8.decode(response.body, allowMalformed: true));
       expect(body, isA<Map>());
       // httpbin echoes back the posted data in 'body' or 'data' field
@@ -174,6 +198,18 @@ void main() {
       );
 
       expect(response.statusCode, 200);
+
+      expect(logs, isNotEmpty, reason: 'observer should emit lifecycle events');
+      expect(
+        logs.any((l) => l.contains('Sending to OHTTP gateway')),
+        isTrue,
+        reason: 'observer should report the gateway POST',
+      );
+      expect(
+        logs.any((l) => l.contains('Round trip completed')),
+        isTrue,
+        reason: 'observer should report a completed round trip',
+      );
 
       final body = jsonDecode(utf8.decode(response.body, allowMalformed: true));
       expect(body, isA<Map>());
