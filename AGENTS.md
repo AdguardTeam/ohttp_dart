@@ -23,7 +23,7 @@ optional adapter for `package:http`.
 | **Target Platforms** | iOS, macOS, Android, Windows                                                   |
 | **Formatter**        | `line-length: 120`, `require_trailing_commas` enabled                          |
 | **Strict analysis**  | `strict-casts: true`, `strict-raw-types: true`                                 |
-| **Version**          | 0.3.0                                                                          |
+| **Version**          | 0.4.0                                                                          |
 | **Publish**          | Not published (`publish_to: none`)                                             |
 
 ## Project Structure
