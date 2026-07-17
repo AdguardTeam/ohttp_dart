@@ -130,6 +130,7 @@ Specific exception types:
 | `OhttpSizeLimitException` | Response exceeds configured size limits (includes `limit` and `actualSize`) |
 | `OhttpNetworkException` | Network-level error — DNS, connection refused, etc. (includes optional `cause`) |
 | `OhttpTimeoutException` | HTTP request exceeded configured timeout (includes `timeout` duration and optional `url`) |
+| `OhttpRequestAbortedException` | Intentional client-side request cancellation (e.g. `http.RequestAbortedException`); a sibling of `OhttpNetworkException`, not a subtype, so an aborted request stays distinguishable from a real network error (includes optional `cause`) |
 
 ## Usage
 

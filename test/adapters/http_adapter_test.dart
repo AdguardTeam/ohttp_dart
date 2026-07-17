@@ -252,6 +252,60 @@ void main() {
       );
     });
 
+    test('fetchKeyConfig throws OhttpRequestAbortedException on client-side cancellation', () async {
+      final client = MockClient((request) async {
+        throw RequestAbortedException();
+      });
+      final transport = HttpClientTransport.insecureForTesting(
+        client: client,
+        keysUrl: Uri.parse(keysUrl),
+        gatewayUrl: Uri.parse(gatewayUrl),
+      );
+
+      await expectLater(
+        transport.fetchKeyConfig(),
+        throwsA(
+          isA<OhttpRequestAbortedException>().having((e) => e.cause, 'cause', isA<RequestAbortedException>()),
+        ),
+      );
+    });
+
+    test('postToGateway throws OhttpRequestAbortedException on client-side cancellation', () async {
+      final client = MockClient((request) async {
+        throw RequestAbortedException();
+      });
+      final transport = HttpClientTransport.insecureForTesting(
+        client: client,
+        keysUrl: Uri.parse(keysUrl),
+        gatewayUrl: Uri.parse(gatewayUrl),
+      );
+
+      await expectLater(
+        transport.postToGateway(Uint8List(0)),
+        throwsA(
+          isA<OhttpRequestAbortedException>().having((e) => e.cause, 'cause', isA<RequestAbortedException>()),
+        ),
+      );
+    });
+
+    test('wraps network errors in OhttpNetworkException during postToGateway', () async {
+      final client = MockClient((request) async {
+        throw ClientException('connection refused');
+      });
+      final transport = HttpClientTransport.insecureForTesting(
+        client: client,
+        keysUrl: Uri.parse(keysUrl),
+        gatewayUrl: Uri.parse(gatewayUrl),
+      );
+
+      await expectLater(
+        transport.postToGateway(Uint8List(0)),
+        throwsA(
+          isA<OhttpNetworkException>().having((e) => e.cause, 'cause', isA<ClientException>()),
+        ),
+      );
+    });
+
     test('fetchKeyConfig throws OhttpTimeoutException on timeout', () async {
       final client = MockClient((request) async {
         await Future<void>.delayed(const Duration(seconds: 2));

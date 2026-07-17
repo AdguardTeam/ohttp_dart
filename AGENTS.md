@@ -225,6 +225,7 @@ The library uses a sealed exception hierarchy:
 - `OhttpSizeLimitException` — response/request exceeds configured size limits (includes `limit` and `actualSize`)
 - `OhttpNetworkException` — network-level error (DNS, connection, etc.; includes optional `cause`)
 - `OhttpTimeoutException` — HTTP request exceeded configured timeout (includes `timeout` duration and optional `url`)
+- `OhttpRequestAbortedException` — intentional client-side request cancellation (`http.RequestAbortedException`); a direct sibling of `OhttpNetworkException` (not a subtype) so cancellations stay type-distinguishable from network errors (includes optional `cause`)
 
 ## Security Considerations
 

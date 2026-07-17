@@ -101,6 +101,16 @@ class HttpClientTransport implements OhttpTransport {
         url: _keysUrl,
         stackTrace: st,
       );
+    } on http.RequestAbortedException catch (e, st) {
+      // Re-route intentional client-side cancellation to a distinct type so
+      // consumers can tell an expected abort from a real network error. Must
+      // sit above `on Exception`: RequestAbortedException extends
+      // ClientException (an Exception), so the reverse order would shadow it.
+      throw OhttpRequestAbortedException(
+        'Request aborted while fetching KeyConfig',
+        cause: e,
+        stackTrace: st,
+      );
     } on OhttpException {
       rethrow;
     } on Exception catch (e, st) {
@@ -140,6 +150,16 @@ class HttpClientTransport implements OhttpTransport {
         'Post to gateway timeout',
         timeout: _postToGatewayTimeout,
         url: _gatewayUrl,
+        stackTrace: st,
+      );
+    } on http.RequestAbortedException catch (e, st) {
+      // Re-route intentional client-side cancellation to a distinct type so
+      // consumers can tell an expected abort from a real network error. Must
+      // sit above `on Exception`: RequestAbortedException extends
+      // ClientException (an Exception), so the reverse order would shadow it.
+      throw OhttpRequestAbortedException(
+        'Request aborted while posting to Gateway',
+        cause: e,
         stackTrace: st,
       );
     } on OhttpException {
