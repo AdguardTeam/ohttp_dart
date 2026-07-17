@@ -79,6 +79,8 @@ fvm flutter test
 fvm flutter test integration_test/simple_test.dart -d macos
 ```
 
+Verified on macOS, Android, iOS, and Windows — both demo paths (OHTTP and direct) exercised interactively on each.
+
 ## Backend
 
 Uses [AdguardTeam/HttpBin](https://github.com/AdguardTeam/HttpBin) deployed at `https://httpbin.agrd.workers.dev/`:
@@ -105,4 +107,3 @@ All cryptographic implementations (HPKE RFC 9180, BHTTP RFC 9292, OHTTP RFC 9458
 ## Limitations
 
 - **No relay** — client sends directly to the gateway (no privacy relay in between), sufficient for demo purposes
-- **Tested on macOS** — should work on all platforms (iOS, Android, Windows) but not yet verified
