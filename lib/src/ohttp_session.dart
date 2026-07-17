@@ -119,7 +119,7 @@ class OhttpSession {
       body: request.body,
     );
 
-    final config = await _cache.get();
+    final config = await _getConfig();
     OhttpResponseData result;
     try {
       result = await _encapsulateAndSend(binaryRequest, config);
@@ -128,7 +128,7 @@ class OhttpSession {
         rethrow;
       }
       _observer?.notifySafe((o) => o.onGatewayRetry());
-      final newConfig = await _cache.get();
+      final newConfig = await _getConfig();
       result = await _encapsulateAndSend(binaryRequest, newConfig);
     }
 
@@ -138,6 +138,16 @@ class OhttpSession {
     }
 
     return result;
+  }
+
+  /// Fetches the key config, notifying the observer if the fetch is aborted.
+  Future<OhttpKeyConfig> _getConfig() async {
+    try {
+      return await _cache.get();
+    } on OhttpRequestAbortedException {
+      _observer?.notifySafe((o) => o.onRequestAborted(OhttpRequestStage.keyConfigFetch));
+      rethrow;
+    }
   }
 
   /// Encapsulates, posts, decapsulates, and parses one round-trip;
@@ -159,6 +169,9 @@ class OhttpSession {
       } on OhttpGatewayException catch (e) {
         _observer?.notifySafe((o) => o.onGatewayError(e.statusCode));
         _cache.invalidate();
+        rethrow;
+      } on OhttpRequestAbortedException {
+        _observer?.notifySafe((o) => o.onRequestAborted(OhttpRequestStage.gatewayPost));
         rethrow;
       }
 

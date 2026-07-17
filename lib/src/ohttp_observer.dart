@@ -39,6 +39,14 @@ abstract class OhttpObserver {
   /// and BHTTP parsing. Not fired when [OhttpSession.send] throws.
   void onRoundTripCompleted(Duration elapsed) {}
 
+  /// Called when an in-flight request is aborted client-side
+  /// (the transport threw [OhttpRequestAbortedException]).
+  ///
+  /// [stage] identifies which transport operation was in flight. Fired just
+  /// before the exception propagates to the caller; no retry or cache
+  /// invalidation follows.
+  void onRequestAborted(OhttpRequestStage stage) {}
+
   /// Calls [callback] with this observer and suppresses any errors.
   void notifySafe(void Function(OhttpObserver) callback) {
     try {
@@ -52,4 +60,13 @@ abstract class OhttpObserver {
       );
     }
   }
+}
+
+/// Pipeline stage at which a transport operation was in flight.
+enum OhttpRequestStage {
+  /// The key-config fetch ([OhttpTransport.fetchKeyConfig]) was in flight.
+  keyConfigFetch,
+
+  /// The encapsulated POST ([OhttpTransport.postToGateway]) was in flight.
+  gatewayPost,
 }

@@ -6,6 +6,9 @@
   of `OhttpNetworkException` when the underlying request is cancelled client-side
   (`http.RequestAbortedException`), so consumers can distinguish an intentional abort from a real network error
   with a plain `on OhttpRequestAbortedException`.
+- Added `onRequestAborted(OhttpRequestStage stage)` observer event and the `OhttpRequestStage` enum — fired by
+  `OhttpSession` just before `OhttpRequestAbortedException` propagates to the caller. The stage identifies whether
+  the key-config fetch or the gateway POST was in flight.
 - Behavior of all other errors is unchanged: timeouts still throw `OhttpTimeoutException`, non-2xx responses
   still throw `OhttpGatewayException`, and other network errors still throw `OhttpNetworkException`.
 

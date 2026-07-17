@@ -12,6 +12,7 @@ class _RecordingObserver extends OhttpObserver {
   int? lastGatewayError;
   Type? lastEncapsulationError;
   Duration? lastRoundTripElapsed;
+  OhttpRequestStage? lastAbortStage;
 
   @override
   void onKeyConfigFetched() => events.add('fetched');
@@ -51,6 +52,12 @@ class _RecordingObserver extends OhttpObserver {
     events.add('roundTripCompleted');
     lastRoundTripElapsed = elapsed;
   }
+
+  @override
+  void onRequestAborted(OhttpRequestStage stage) {
+    events.add('requestAborted');
+    lastAbortStage = stage;
+  }
 }
 
 /// Observer that throws from every callback.
@@ -81,6 +88,9 @@ class _ThrowingObserver extends OhttpObserver {
 
   @override
   void onRoundTripCompleted(Duration elapsed) => throw Exception('fail');
+
+  @override
+  void onRequestAborted(OhttpRequestStage stage) => throw Exception('fail');
 }
 
 /// KeyConfigCache subclass that returns a config with unsupported KDF/AEAD,
@@ -107,11 +117,15 @@ class _FakeTransport implements OhttpTransport {
   _FakeTransport([Uint8List? config]) : config = config ?? validKeyConfig();
 
   int fetchCount = 0;
+  Object? fetchError;
   Object? postError;
 
   @override
   Future<Uint8List> fetchKeyConfig() async {
     fetchCount++;
+    if (fetchError != null) {
+      throw fetchError!;
+    }
 
     return config;
   }
@@ -229,6 +243,42 @@ void main() {
       // onRoundTripCompleted must NOT fire on error paths.
       await expectLater(makeSession().send(request), throwsA(isA<OhttpException>()));
       expect(observer.events, isNot(contains('roundTripCompleted')));
+    });
+
+    test('onRequestAborted with keyConfigFetch stage on aborted config fetch', () async {
+      transport.fetchError = const OhttpRequestAbortedException('aborted');
+
+      await expectLater(makeSession().send(request), throwsA(isA<OhttpRequestAbortedException>()));
+      expect(observer.events, contains('requestAborted'));
+      expect(observer.lastAbortStage, OhttpRequestStage.keyConfigFetch);
+      expect(observer.events, isNot(contains('gatewayRetry')));
+      expect(observer.events, isNot(contains('cacheInvalidated')));
+    });
+
+    test('onRequestAborted with gatewayPost stage on aborted gateway post', () async {
+      final s = makeSession();
+      await expectLater(s.send(request), throwsA(anything)); // seed cache
+      observer.events.clear();
+      transport.postError = const OhttpRequestAbortedException('aborted');
+
+      await expectLater(s.send(request), throwsA(isA<OhttpRequestAbortedException>()));
+      expect(observer.events, contains('requestAborted'));
+      expect(observer.lastAbortStage, OhttpRequestStage.gatewayPost);
+      expect(observer.events, isNot(contains('gatewayError')));
+      expect(observer.events, isNot(contains('cacheInvalidated')));
+      expect(observer.events, isNot(contains('gatewayRetry')));
+      expect(observer.events, isNot(contains('roundTripCompleted')));
+    });
+
+    test('throwing observer does not break pipeline on abort', () async {
+      transport.postError = const OhttpRequestAbortedException('aborted');
+      final s = OhttpSession(
+        transport: transport,
+        cache: KeyConfigCache(transport: transport, observer: _ThrowingObserver()),
+        observer: _ThrowingObserver(),
+      );
+
+      await expectLater(s.send(request), throwsA(isA<OhttpRequestAbortedException>()));
     });
   });
   group('KeyConfigCache with observer', () {

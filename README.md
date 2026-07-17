@@ -64,6 +64,9 @@ class MyObserver extends OhttpObserver {
 
   @override
   void onRoundTripCompleted(Duration elapsed) => print('Round trip completed in $elapsed');
+
+  @override
+  void onRequestAborted(OhttpRequestStage stage) => print('Request aborted during $stage');
 }
 
 final session = OhttpSession.withTransport(
