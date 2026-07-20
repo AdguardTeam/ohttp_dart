@@ -16,14 +16,14 @@ optional adapter for `package:http`.
 | **Language**         | Dart 3.11.1+                                                                   |
 | **Crypto**           | `cryptography` 2.9.0 (pure Dart, no native dependencies)                       |
 | **HTTP Client**      | `http` 1.6.0 (optional adapter)                                                |
-| **Annotations**      | `meta` 1.16.0 (`@visibleForTesting`)                                           |
+| **Annotations**      | `meta` 1.17.0 (`@visibleForTesting`)                                           |
 | **Architecture**     | Transport-agnostic core + optional `package:http` adapter                      |
 | **Testing**          | `test` 1.25.6 + `kiri_check` 1.3.1 (property-based testing)                    |
 | **Linting**          | `lints` 3.0.0 + Dart Code Metrics (inline in `analysis_options.yaml`)          |
 | **Target Platforms** | iOS, macOS, Android, Windows                                                   |
 | **Formatter**        | `line-length: 120`, `require_trailing_commas` enabled                          |
 | **Strict analysis**  | `strict-casts: true`, `strict-raw-types: true`                                 |
-| **Version**          | 0.3.0                                                                          |
+| **Version**          | 0.3.1                                                                          |
 | **Publish**          | Not published (`publish_to: none`)                                             |
 
 ## Project Structure
@@ -68,8 +68,23 @@ ohttp_dart/
 │   │   └── pipeline_test_utils.dart        # Shared integration helpers
 │   └── stubs/
 │       └── gateway_stub.dart               # In-memory gateway stub
-├── example/                               # Usage examples
-│   └── ohttp_dart_example.dart
+├── example/                             # Flutter demo app: OHTTP vs. direct HTTP
+│   ├── lib/
+│   │   ├── main.dart                     # Two-path demo UI + state (OHTTP + direct)
+│   │   └── src/
+│   │       ├── gateways.dart             # HttpClientTransport gateway presets
+│   │       ├── log_entry.dart            # Log entry model (level, source, message)
+│   │       ├── log_observer.dart         # OhttpObserver -> on-screen log
+│   │       ├── log_panel.dart            # Color-coded, auto-scrolling log list
+│   │       ├── json_highlighter.dart     # Dependency-free JSON syntax highlighting
+│   │       ├── path_defaults.dart        # Method -> default echo path sync
+│   │       ├── privacy_facts.dart        # Echo-response privacy fact extraction
+│   │       ├── response_view.dart        # Status chip, meta line, highlighted body
+│   │       └── compare_view.dart         # OHTTP vs direct privacy comparison table
+│   ├── integration_test/                 # On-device integration tests (live network)
+│   ├── test/                             # Widget tests
+│   ├── android/, ios/, macos/, windows/  # Platform scaffolding
+│   └── pubspec.yaml                      # Depends on ohttp_dart via path: ../
 └── analysis_options.yaml                  # Linter rules, DCM config, formatter settings
 ```
 
