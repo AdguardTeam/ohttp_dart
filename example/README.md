@@ -52,13 +52,6 @@ lib/
 │   ├── privacy_facts.dart        # Echo-response privacy fact extraction
 │   ├── response_view.dart        # Status chip, meta line, highlighted body
 │   └── compare_view.dart         # OHTTP vs direct privacy comparison table
-integration_test/
-├── simple_test.dart              # E2E: GET/POST via OHTTP, Direct, comparison
-test/
-├── json_highlighter_test.dart    # Span structure and palette tests
-├── path_defaults_test.dart       # Method↔path sync rule tests
-├── privacy_facts_test.dart       # Echo extraction tests
-└── widget_test.dart              # UI rendering tests
 ```
 
 ## Build & Run
@@ -71,12 +64,6 @@ fvm flutter pub get
 
 # Run on macOS
 fvm flutter run -d macos
-
-# Run unit tests
-fvm flutter test
-
-# Run integration tests (requires network)
-fvm flutter test integration_test/simple_test.dart -d macos
 ```
 
 Verified on macOS, Android, iOS, and Windows — both demo paths (OHTTP and direct) exercised interactively on each.
