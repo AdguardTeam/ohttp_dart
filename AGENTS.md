@@ -23,7 +23,7 @@ optional adapter for `package:http`.
 | **Target Platforms** | iOS, macOS, Android, Windows                                                   |
 | **Formatter**        | `line-length: 120`, `require_trailing_commas` enabled                          |
 | **Strict analysis**  | `strict-casts: true`, `strict-raw-types: true`                                 |
-| **Version**          | 0.3.1                                                                          |
+| **Version**          | 0.4.0                                                                          |
 | **Publish**          | Not published (`publish_to: none`)                                             |
 
 ## Project Structure
@@ -240,6 +240,7 @@ The library uses a sealed exception hierarchy:
 - `OhttpSizeLimitException` — response/request exceeds configured size limits (includes `limit` and `actualSize`)
 - `OhttpNetworkException` — network-level error (DNS, connection, etc.; includes optional `cause`)
 - `OhttpTimeoutException` — HTTP request exceeded configured timeout (includes `timeout` duration and optional `url`)
+- `OhttpRequestAbortedException` — intentional client-side request cancellation (`http.RequestAbortedException`); a direct sibling of `OhttpNetworkException` (not a subtype) so cancellations stay type-distinguishable from network errors (includes optional `cause`)
 
 ## Security Considerations
 

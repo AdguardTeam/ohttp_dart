@@ -1,3 +1,17 @@
+## 0.4.0
+
+- Added `OhttpRequestAbortedException` to the sealed `OhttpException` hierarchy — a sibling of
+  `OhttpNetworkException` that preserves the original error in `cause` and the captured stack trace in `stackTrace`.
+- `HttpClientTransport.fetchKeyConfig()` and `postToGateway()` now throw `OhttpRequestAbortedException` instead
+  of `OhttpNetworkException` when the underlying request is cancelled client-side
+  (`http.RequestAbortedException`), so consumers can distinguish an intentional abort from a real network error
+  with a plain `on OhttpRequestAbortedException`.
+- Added `onRequestAborted(OhttpRequestStage stage)` observer event and the `OhttpRequestStage` enum — fired by
+  `OhttpSession` just before `OhttpRequestAbortedException` propagates to the caller. The stage identifies whether
+  the key-config fetch or the gateway POST was in flight.
+- Behavior of all other errors is unchanged: timeouts still throw `OhttpTimeoutException`, non-2xx responses
+  still throw `OhttpGatewayException`, and other network errors still throw `OhttpNetworkException`.
+
 ## 0.3.1
 
 - Raised the `meta` dependency constraint from an exact `1.16.0` pin to `1.17.0`, so the package resolves

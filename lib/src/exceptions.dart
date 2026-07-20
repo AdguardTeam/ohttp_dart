@@ -131,3 +131,18 @@ class OhttpTimeoutException extends OhttpNetworkException {
     return 'OhttpTimeoutException: $message$urlPart (timeout: ${timeout.inSeconds}s)';
   }
 }
+
+/// Thrown when an in-flight request is intentionally cancelled/aborted
+/// (e.g. `http.RequestAbortedException`).
+///
+/// Deliberately not an [OhttpNetworkException] subtype, so existing
+/// `on OhttpNetworkException` handlers don't swallow cancellations.
+class OhttpRequestAbortedException extends OhttpException {
+  /// The original cancellation error (e.g. `http.RequestAbortedException`), if any.
+  final Object? cause;
+
+  const OhttpRequestAbortedException(super.message, {super.stackTrace, this.cause});
+
+  @override
+  String get baseMessage => cause != null ? '$runtimeType: $message (cause: $cause)' : super.baseMessage;
+}

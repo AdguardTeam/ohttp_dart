@@ -101,6 +101,14 @@ class HttpClientTransport implements OhttpTransport {
         url: _keysUrl,
         stackTrace: st,
       );
+    } on http.RequestAbortedException catch (e, st) {
+      // Map an intentional cancellation to a distinct type. Must precede
+      // `on Exception` — RequestAbortedException is an Exception subtype.
+      throw OhttpRequestAbortedException(
+        'Request aborted while fetching KeyConfig',
+        cause: e,
+        stackTrace: st,
+      );
     } on OhttpException {
       rethrow;
     } on Exception catch (e, st) {
@@ -140,6 +148,14 @@ class HttpClientTransport implements OhttpTransport {
         'Post to gateway timeout',
         timeout: _postToGatewayTimeout,
         url: _gatewayUrl,
+        stackTrace: st,
+      );
+    } on http.RequestAbortedException catch (e, st) {
+      // Map an intentional cancellation to a distinct type. Must precede
+      // `on Exception` — RequestAbortedException is an Exception subtype.
+      throw OhttpRequestAbortedException(
+        'Request aborted while posting to Gateway',
+        cause: e,
         stackTrace: st,
       );
     } on OhttpException {
