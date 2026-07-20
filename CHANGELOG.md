@@ -12,6 +12,18 @@
 - Behavior of all other errors is unchanged: timeouts still throw `OhttpTimeoutException`, non-2xx responses
   still throw `OhttpGatewayException`, and other network errors still throw `OhttpNetworkException`.
 
+## 0.3.1
+
+- Raised the `meta` dependency constraint from an exact `1.16.0` pin to `1.17.0`, so the package resolves
+  alongside the current Flutter `flutter_test` toolchain used by the example app. Consumers that pin `meta`
+  at `1.16.0` will need to allow `1.17.0`.
+- Replaced the command-line `example/` with a Flutter demo app that showcases the OHTTP round trip
+  (`OhttpSession` over `HttpClientTransport`) against a live gateway, side by side with a direct-HTTP path
+  for comparison. The example now depends on the in-repo package via `path: ../`.
+- The Flutter example's on-screen log now surfaces the two `0.3.0` observer events — gateway retry
+  (`onGatewayRetry`) and round-trip timing (`onRoundTripCompleted`) — so the demo reflects the package's
+  auto-retry and round-trip-timing behavior instead of hiding it.
+
 ## 0.3.0
 
 - Added automatic retry on gateway errors with key rotation in `OhttpSession` (`retryOnGatewayError`, default `true`).
