@@ -283,37 +283,37 @@ void main() {
   });
   group('KeyConfigCache with observer', () {
     test('onKeyConfigFetched on cold get', () async {
-      final o = _RecordingObserver();
-      final c = KeyConfigCache(transport: _FakeTransport(), observer: o);
-      await c.get();
-      expect(o.events, contains('fetched'));
+      final observer = _RecordingObserver();
+      final cache = KeyConfigCache(transport: _FakeTransport(), observer: observer);
+      await cache.get();
+      expect(observer.events, contains('fetched'));
     });
 
     test('onKeyConfigCacheHit on warm get', () async {
-      final o = _RecordingObserver();
-      final c = KeyConfigCache(transport: _FakeTransport(), observer: o);
-      await c.get();
-      o.events.clear();
-      await c.get();
-      expect(o.events, contains('cacheHit'));
+      final observer = _RecordingObserver();
+      final cache = KeyConfigCache(transport: _FakeTransport(), observer: observer);
+      await cache.get();
+      observer.events.clear();
+      await cache.get();
+      expect(observer.events, contains('cacheHit'));
     });
 
     test('throwing observer does not break cache', () async {
-      final c = KeyConfigCache(transport: _FakeTransport(), observer: _ThrowingObserver());
-      final config = await c.get();
+      final cache = KeyConfigCache(transport: _FakeTransport(), observer: _ThrowingObserver());
+      final config = await cache.get();
       expect(config.keyId, 0x01);
-      final config2 = await c.get();
+      final config2 = await cache.get();
       expect(config2.keyId, 0x01);
     });
 
     test('onCacheInvalidated on direct invalidate', () async {
-      final o = _RecordingObserver();
-      final c = KeyConfigCache(transport: _FakeTransport(), observer: o);
-      await c.get();
-      o.events.clear();
+      final observer = _RecordingObserver();
+      final cache = KeyConfigCache(transport: _FakeTransport(), observer: observer);
+      await cache.get();
+      observer.events.clear();
 
-      c.invalidate();
-      expect(o.events, contains('cacheInvalidated'));
+      cache.invalidate();
+      expect(observer.events, contains('cacheInvalidated'));
     });
   });
 }
