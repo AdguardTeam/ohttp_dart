@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'data/key_config_fetch_result.dart';
 
 /// Transport abstraction — the bytes-in / bytes-out seam between
 /// OHTTP orchestration and any HTTP client.
@@ -7,7 +8,8 @@ import 'dart:typed_data';
 /// so that [OhttpSession] can invalidate the KeyConfig cache.
 abstract interface class OhttpTransport {
   /// Fetch the raw OHTTP KeyConfig from the gateway.
-  Future<Uint8List> fetchKeyConfig();
+  /// Returns raw bytes and an optional max-age TTL from the gateway.
+  Future<KeyConfigFetchResult> fetchKeyConfig();
 
   /// POST the encapsulated OHTTP request to the gateway.
   ///

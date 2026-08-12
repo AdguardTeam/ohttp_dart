@@ -9,6 +9,7 @@ library;
 
 export 'src/bhttp.dart';
 export 'src/bhttp_response_limits.dart';
+export 'src/data/key_config_fetch_result.dart';
 export 'src/erasable_byte_array.dart';
 export 'src/exceptions.dart';
 export 'src/hpke.dart';
