@@ -121,13 +121,13 @@ class _FakeTransport implements OhttpTransport {
   Object? postError;
 
   @override
-  Future<Uint8List> fetchKeyConfig() async {
+  Future<KeyConfigFetchResult> fetchKeyConfig() async {
     fetchCount++;
     if (fetchError != null) {
       throw fetchError!;
     }
 
-    return config;
+    return KeyConfigFetchResult(bytes: config, maxAge: null);
   }
 
   @override
@@ -304,6 +304,16 @@ void main() {
       expect(config.keyId, 0x01);
       final config2 = await c.get();
       expect(config2.keyId, 0x01);
+    });
+
+    test('onCacheInvalidated on direct invalidate', () async {
+      final o = _RecordingObserver();
+      final c = KeyConfigCache(transport: _FakeTransport(), observer: o);
+      await c.get();
+      o.events.clear();
+
+      c.invalidate();
+      expect(o.events, contains('cacheInvalidated'));
     });
   });
 }
