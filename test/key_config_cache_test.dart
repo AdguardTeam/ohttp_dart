@@ -14,14 +14,16 @@ class _FakeTransport implements OhttpTransport {
 
   Object? fetchError;
 
+  Duration? maxAge;
+
   @override
-  Future<Uint8List> fetchKeyConfig() async {
+  Future<KeyConfigFetchResult> fetchKeyConfig() async {
     fetchCount++;
     if (fetchError != null) {
       throw fetchError!;
     }
 
-    return config;
+    return KeyConfigFetchResult(bytes: config, maxAge: maxAge);
   }
 
   @override
@@ -118,6 +120,104 @@ void main() {
 
       expect(config.keyId, 0x01);
       expect(transport.fetchCount, 3);
+    });
+
+    group('TTL resolution', () {
+      test('uses server max-age when ttl is null', () async {
+        var now = DateTime(2026);
+        transport.maxAge = const Duration(seconds: 120);
+        final cache = KeyConfigCache(transport: transport, now: () => now);
+
+        await cache.get();
+        expect(transport.fetchCount, 1);
+
+        // Advance 119 s — still cached
+        now = now.add(const Duration(seconds: 119));
+        await cache.get();
+        expect(transport.fetchCount, 1);
+
+        // Advance past 120 s — triggers re-fetch
+        now = now.add(const Duration(seconds: 2));
+        await cache.get();
+        expect(transport.fetchCount, 2);
+      });
+
+      test('explicit ttl takes priority over server max-age', () async {
+        var now = DateTime(2026);
+        transport.maxAge = const Duration(seconds: 120);
+        final cache = KeyConfigCache(
+          transport: transport,
+          now: () => now,
+          ttl: const Duration(minutes: 10),
+        );
+
+        await cache.get();
+
+        // Advance past server max-age but within explicit ttl
+        now = now.add(const Duration(minutes: 5));
+        await cache.get();
+        expect(transport.fetchCount, 1, reason: 'explicit ttl wins over server max-age');
+
+        // Advance past explicit ttl
+        now = now.add(const Duration(minutes: 6));
+        await cache.get();
+        expect(transport.fetchCount, 2);
+      });
+
+      test('falls back to OhttpConstants.defaultKeyConfigCacheTtl when max-age is null', () async {
+        var now = DateTime(2026);
+        transport.maxAge = null;
+        final cache = KeyConfigCache(transport: transport, now: () => now);
+
+        await cache.get();
+
+        // Advance to just before TTL expiry
+        now = now.add(OhttpConstants.defaultKeyConfigCacheTtl - const Duration(minutes: 1));
+        await cache.get();
+        expect(transport.fetchCount, 1);
+
+        // Advance past TTL
+        now = now.add(const Duration(minutes: 2));
+        await cache.get();
+        expect(transport.fetchCount, 2);
+      });
+
+      test('max-age=0 causes re-fetch on every get', () async {
+        var now = DateTime(2026);
+        transport.maxAge = Duration.zero;
+        final cache = KeyConfigCache(transport: transport, now: () => now);
+
+        await cache.get();
+        expect(transport.fetchCount, 1);
+
+        await cache.get();
+        expect(transport.fetchCount, 2);
+      });
+
+      test('re-fetch uses new max-age from fresh response', () async {
+        var now = DateTime(2026);
+        transport.maxAge = const Duration(seconds: 120);
+        final cache = KeyConfigCache(transport: transport, now: () => now);
+
+        await cache.get();
+        expect(transport.fetchCount, 1);
+
+        // Advance past old 120 s max-age to trigger re-fetch
+        now = now.add(const Duration(seconds: 121));
+        transport.maxAge = const Duration(seconds: 300);
+        await cache.get();
+        expect(transport.fetchCount, 2);
+
+        // Advance 200 s — within new 300 s TTL
+        now = now.add(const Duration(seconds: 200));
+        await cache.get();
+        expect(transport.fetchCount, 2, reason: 'new max-age of 300 s keeps entry cached');
+
+        // Advance past new 300 s TTL
+        now = now.add(const Duration(seconds: 101));
+        await cache.get();
+        expect(transport.fetchCount, 3);
+      });
     });
   });
 }
