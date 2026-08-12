@@ -174,18 +174,28 @@ final response = await session.send(request);
 
 ### Session configuration
 
-`OhttpSession` supports configurable limits for response sizes:
+`OhttpSession` supports configurable limits for response sizes
+and a TTL override for the key config cache:
 
 ```dart
 final session = OhttpSession.withTransport(
   transport: transport,
   maxEncryptedResponseBytes: 32 * 1024 * 1024, // 32 MiB (default: 16 MiB)
+  keyConfigCacheTtl: Duration(minutes: 30),    // optional TTL override
   decryptedResponseLimits: BhttpResponseLimits(
     maxHeaderBytes: 32 * 1024,  // 32 KiB (default: 16 KiB)
     maxBodyBytes: 20 * 1024 * 1024, // 20 MiB (default: 10 MiB)
   ),
 );
 ```
+
+**Key Config Cache TTL resolution** (highest to lowest priority):
+
+1. Explicit `keyConfigCacheTtl` passed to `withTransport` (or `ttl` on `KeyConfigCache`)
+2. Server `max-age` from the `Cache-Control` header
+3. `OhttpConstants.defaultKeyConfigCacheTtl` (1 hour)
+
+`no-cache` / `no-store` in the server response disables caching (TTL = 0).
 
 For full control over the cache, use the primary constructor:
 
@@ -233,8 +243,9 @@ Implement `OhttpTransport` to integrate with any HTTP client (Dio, etc.):
 ```dart
 class DioTransport implements OhttpTransport {
   @override
-  Future<Uint8List> fetchKeyConfig() async {
+  Future<KeyConfigFetchResult> fetchKeyConfig() async {
     // GET the key config URL, throw OhttpGatewayException on non-2xx
+    // Return KeyConfigFetchResult(bytes: body, maxAge: parsedMaxAge)
   }
 
   @override
