@@ -1,3 +1,24 @@
+## 0.5.0
+
+### Breaking changes
+
+- `OhttpTransport.fetchKeyConfig()` now returns `Future<KeyConfigFetchResult>` instead of `Future<Uint8List>`.
+  `KeyConfigFetchResult` carries the raw bytes and an optional `Duration? maxAge` from `Cache-Control: max-age`.
+  Custom transport implementations must return `KeyConfigFetchResult`; use `KeyConfigFetchResult(bytes: data)`
+  when headers are unavailable (`maxAge` defaults to `null`).
+
+### Changed
+
+- `KeyConfigCache.ttl` is now nullable. When `null` (the new default), TTL is derived from the server's
+  `Cache-Control: max-age`; falls back to `OhttpConstants.defaultKeyConfigCacheTtl`(1 hour) if absent. An explicit `ttl` always takes priority.
+- `OhttpHttpClient.create` parameter `keyConfigCacheTtl` is now `Duration?` (default `null` = auto).
+- `OhttpSession.withTransport` gains an optional `Duration? ttl` parameter, passed to `KeyConfigCache`.
+- `HttpClientTransport.fetchKeyConfig()` now parses `Cache-Control: max-age=N` and includes it in the result.
+
+### Added
+
+- `KeyConfigFetchResult` data class (`lib/src/key_config_fetch_result.dart`).
+
 ## 0.4.0
 
 - Added `OhttpRequestAbortedException` to the sealed `OhttpException` hierarchy — a sibling of
