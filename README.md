@@ -99,6 +99,9 @@ lib/
     ├── ohttp_session.dart              # OHTTP session orchestrator
     ├── ohttp_transport.dart            # Transport abstraction interface
     ├── erasable_byte_array.dart        # Byte buffer that zeroes on erase(), guards post-erase reads
+    ├── ohttp_constants.dart            # Centralized default values
+    ├── data/
+    │   └── key_config_fetch_result.dart # Result type for key config fetch (bytes + TTL)
     └── adapters/
         └── http/
             ├── http_client_transport.dart   # HttpClientTransport implementation
@@ -262,7 +265,7 @@ class DioTransport implements OhttpTransport {
 |---------|---------|---------|
 | `cryptography` | 2.9.0 | Pure Dart crypto primitives (X25519, HMAC, AES-GCM) |
 | `http` | 1.6.0 | HTTP client for the `package:http` adapter |
-| `meta` | 1.16.0 | Annotations (`@visibleForTesting`) |
+| `meta` | 1.17.0 | Annotations (`@visibleForTesting`) |
 
 Dev dependencies: `test` 1.25.6, `kiri_check` 1.3.1 (property-based testing), `lints` 3.0.0.
 
