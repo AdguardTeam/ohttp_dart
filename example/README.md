@@ -68,6 +68,26 @@ fvm flutter run -d macos
 
 Verified on macOS, Android, iOS, and Windows — both demo paths (OHTTP and direct) exercised interactively on each.
 
+## Local debug gateway
+
+Replaces the production OHTTP gateway with a local Go service so that Proxyman can intercept decrypted traffic (method, URL, headers, body). Requests appear under the `local-ohttp-gw` client in Proxyman.
+
+**Prerequisites:** Go 1.25+ (`brew install go`)
+
+**Setup (once):** add `*.agrd.workers.dev` to Proxyman → Tools → SSL Proxying List.
+
+**Usage:**
+
+```bash
+# 1. Start the gateway
+make ohttp-gw
+# Ready when: Local OHTTP gateway: https://localhost:8443
+
+# 2. Run the app via VS Code: "example (local OHTTP gateway)" config, then enable Proxy toggle in the UI
+```
+
+The gateway is in `scripts/local_ohttp_gw/`; env overrides are in `config/dev_local_ohttp.env`.
+
 ## Backend
 
 Uses [AdguardTeam/HttpBin](https://github.com/AdguardTeam/HttpBin) deployed at `https://httpbin.agrd.workers.dev/`:

@@ -82,13 +82,24 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> with SingleTickerProvider
   }
 
   void _initSession(String name) {
-    _rawClient = _proxyEnabled ? _createProxiedClient('localhost:$_proxyPort') : http.Client();
+    final useLocal = localGatewayEnabled && _proxyEnabled;
+    _rawClient = useLocal
+        ? _createLocalGatewayClient()
+        : _proxyEnabled
+        ? _createProxiedClient('localhost:$_proxyPort')
+        : http.Client();
     final entry = _gateways[name]!;
     _authority = entry.authority;
     final observer = LogObserver((level, message) => _addEntry(level, 'OHTTP', message));
-    final transport = entry.transport(_rawClient);
+    final transport = useLocal ? localGatewayTransport(_rawClient) : entry.transport(_rawClient);
     _cache = KeyConfigCache(transport: transport, observer: observer);
     _session = OhttpSession(transport: transport, cache: _cache, observer: observer);
+  }
+
+  // Accepts the self-signed cert generated at runtime by the local Go gateway.
+  http.Client _createLocalGatewayClient() {
+    final ioClient = HttpClient()..badCertificateCallback = (cert, host, port) => true;
+    return IOClient(ioClient);
   }
 
   http.Client _createProxiedClient(String proxyUrl) {
