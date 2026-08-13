@@ -127,7 +127,7 @@ class _FakeTransport implements OhttpTransport {
       throw fetchError!;
     }
 
-    return KeyConfigFetchResult(bytes: config, maxAge: null);
+    return KeyConfigFetchResult(bytes: config);
   }
 
   @override

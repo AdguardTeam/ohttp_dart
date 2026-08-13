@@ -11,6 +11,6 @@ class KeyConfigFetchResult {
   /// Creates a [KeyConfigFetchResult]
   const KeyConfigFetchResult({
     required this.bytes,
-    required this.maxAge,
+    this.maxAge,
   });
 }
