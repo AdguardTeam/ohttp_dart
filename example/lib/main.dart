@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import 'package:ohttp_dart/http.dart';
 import 'package:ohttp_dart/ohttp_dart.dart';
 
@@ -69,6 +71,8 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> with SingleTickerProvider
   late OhttpSession _session;
   String _authority = httpbinAuthority;
   String _selectedGateway = 'httpbin';
+  bool _proxyEnabled = false;
+  int _proxyPort = 9090;
 
   @override
   void initState() {
@@ -78,13 +82,21 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> with SingleTickerProvider
   }
 
   void _initSession(String name) {
-    _rawClient = http.Client();
+    _rawClient = _proxyEnabled ? _createProxiedClient('localhost:$_proxyPort') : http.Client();
     final entry = _gateways[name]!;
     _authority = entry.authority;
     final observer = LogObserver((level, message) => _addEntry(level, 'OHTTP', message));
     final transport = entry.transport(_rawClient);
     _cache = KeyConfigCache(transport: transport, observer: observer);
     _session = OhttpSession(transport: transport, cache: _cache, observer: observer);
+  }
+
+  http.Client _createProxiedClient(String proxyUrl) {
+    final ioClient = HttpClient()..findProxy = (uri) => 'PROXY $proxyUrl';
+    if (kDebugMode) {
+      ioClient.badCertificateCallback = (cert, host, port) => true;
+    }
+    return IOClient(ioClient);
   }
 
   @override
@@ -123,6 +135,51 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> with SingleTickerProvider
     });
   }
 
+  void _onProxyToggled(bool value) async {
+    if (value) {
+      final port = await _showProxyPortDialog();
+      if (port == null) return;
+      _proxyPort = port;
+    }
+    _rawClient.close();
+    setState(() {
+      _proxyEnabled = value;
+      _initSession(_selectedGateway);
+    });
+    _addEntry(LogLevel.info, 'proxy', value ? 'Proxy enabled: localhost:$_proxyPort' : 'Proxy disabled');
+  }
+
+  Future<int?> _showProxyPortDialog() {
+    final controller = TextEditingController(text: '$_proxyPort');
+    return showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Proxy Port'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Port',
+            hintText: '9090',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              final port = int.tryParse(controller.text);
+              Navigator.pop(ctx, port);
+            },
+            child: const Text('Enable'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _addEntry(LogLevel level, String source, String message) {
     if (!mounted) {
       return;
@@ -149,10 +206,7 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> with SingleTickerProvider
         scheme: 'https',
         authority: _authority,
         path: _pathController.text,
-        headers: [
-          ('accept', 'application/json'),
-          if (_hasBody) ('content-type', 'application/json'),
-        ],
+        headers: [('accept', 'application/json'), if (_hasBody) ('content-type', 'application/json')],
         body: _ohttpBody(),
       );
 
@@ -190,10 +244,7 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> with SingleTickerProvider
       _addEntry(LogLevel.info, 'direct', 'Sending direct request...');
 
       final uri = Uri.https(_authority, _pathController.text);
-      final headers = <String, String>{
-        'Accept': 'application/json',
-        if (_hasBody) 'Content-Type': 'application/json',
-      };
+      final headers = <String, String>{'Accept': 'application/json', if (_hasBody) 'Content-Type': 'application/json'};
       final body = _hasBody ? _bodyController.text : null;
 
       final stopwatch = Stopwatch()..start();
@@ -279,6 +330,8 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> with SingleTickerProvider
                           onChanged: _loading ? null : _onGatewayChanged,
                         ),
                         const Spacer(),
+                        Text(_proxyEnabled ? 'Proxy :$_proxyPort' : 'Proxy'),
+                        Switch(value: _proxyEnabled, onChanged: _loading ? null : _onProxyToggled),
                         IconButton(
                           icon: const Icon(Icons.key_off),
                           tooltip: 'Invalidate cached key config',
