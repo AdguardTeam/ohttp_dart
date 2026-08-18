@@ -20,7 +20,7 @@ class KeyConfigCache {
   ///
   /// [now] overrides the clock (defaults to [DateTime.now]).
   /// [ttl] overrides the cache lifetime; when `null`, resolves TTL from [KeyConfigFetchResult.maxAge]
-  /// with [OhttpConstants.defaultKeyConfigCacheTtl] as fallback.
+  /// with [OhttpConstants.fallbackKeyConfigCacheTtl] as fallback.
   /// [observer] receives notifications on fetch and cache-hit events.
   KeyConfigCache({
     required OhttpTransport transport,
@@ -80,5 +80,5 @@ class KeyConfigCache {
     return config;
   }
 
-  Duration _resolveTtl(Duration? serverMaxAge) => _ttl ?? serverMaxAge ?? OhttpConstants.defaultKeyConfigCacheTtl;
+  Duration _resolveTtl(Duration? serverMaxAge) => _ttl ?? serverMaxAge ?? OhttpConstants.fallbackKeyConfigCacheTtl;
 }

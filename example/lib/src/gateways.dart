@@ -23,4 +23,8 @@ HttpClientTransport httpbinTransport(http.Client client) {
 }
 
 HttpClientTransport localGatewayTransport(http.Client client) =>
-    HttpClientTransport(client: client, keysUrl: Uri.parse(_localKeyConfigUrl), gatewayUrl: Uri.parse(_localRelayUrl));
+    HttpClientTransport(
+      client: client,
+      keysUrl: Uri.parse(_localKeyConfigUrl),
+      gatewayUrl: Uri.parse(_localRelayUrl),
+    );

@@ -1,7 +1,7 @@
 /// Default values for the OHTTP library
 abstract final class OhttpConstants {
-  /// Default cache TTL for [KeyConfigCache].
-  static const defaultKeyConfigCacheTtl = Duration(hours: 1);
+  /// Fallback cache TTL for [KeyConfigCache]
+  static const fallbackKeyConfigCacheTtl = Duration(hours: 1);
 
   /// Default timeout for fetching the key config from the gateway.
   static const defaultFetchKeyConfigTimeout = Duration(seconds: 30);

@@ -196,7 +196,7 @@ final session = OhttpSession.withTransport(
 
 1. Explicit `keyConfigCacheTtl` passed to `withTransport` (or `ttl` on `KeyConfigCache`)
 2. Server `max-age` from the `Cache-Control` header
-3. `OhttpConstants.defaultKeyConfigCacheTtl` (1 hour)
+3. `OhttpConstants.fallbackKeyConfigCacheTtl` (1 hour)
 
 `no-cache` / `no-store` in the server response disables caching (TTL = 0).
 

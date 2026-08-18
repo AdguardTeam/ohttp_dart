@@ -164,7 +164,7 @@ void main() {
         expect(transport.fetchCount, 2);
       });
 
-      test('falls back to OhttpConstants.defaultKeyConfigCacheTtl when max-age is null', () async {
+      test('falls back to OhttpConstants.fallbackKeyConfigCacheTtl when max-age is null', () async {
         var now = DateTime(2026);
         transport.maxAge = null;
         final cache = KeyConfigCache(transport: transport, now: () => now);
@@ -172,7 +172,7 @@ void main() {
         await cache.get();
 
         // Advance to just before TTL expiry
-        now = now.add(OhttpConstants.defaultKeyConfigCacheTtl - const Duration(minutes: 1));
+        now = now.add(OhttpConstants.fallbackKeyConfigCacheTtl - const Duration(minutes: 1));
         await cache.get();
         expect(transport.fetchCount, 1);
 

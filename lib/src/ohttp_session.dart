@@ -89,7 +89,7 @@ class OhttpSession {
        _retryOnGatewayError = retryOnGatewayError;
 
   /// Shortcut that creates a [KeyConfigCache] over [transport].
-  /// [keyConfigCacheTtl] overrides cache TTL; defaults to server `max-age` or [OhttpConstants.defaultKeyConfigCacheTtl].
+  /// [keyConfigCacheTtl] overrides cache TTL; defaults to server `max-age` or [OhttpConstants.fallbackKeyConfigCacheTtl].
   OhttpSession.withTransport({
     required OhttpTransport transport,
     OhttpObserver? observer,
