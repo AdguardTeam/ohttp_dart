@@ -233,7 +233,7 @@ func ParseBhttpRequest(data []byte) (*BhttpRequest, error) {
 		return nil, err
 	}
 
-	hSectionLen, n, _ := readVarint(data, off)
+	hSectionLen, n, err := readVarint(data, off)
 	if err != nil {
 		return nil, fmt.Errorf("header section length: %w", err)
 	}
@@ -257,7 +257,7 @@ func ParseBhttpRequest(data []byte) (*BhttpRequest, error) {
 		headers = append(headers, [2]string{string(name), string(value)})
 	}
 
-	cLen, n, _ := readVarint(data, off)
+	cLen, n, err := readVarint(data, off)
 	if err != nil {
 		return nil, fmt.Errorf("content length: %w", err)
 	}
