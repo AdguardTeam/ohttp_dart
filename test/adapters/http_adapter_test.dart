@@ -185,7 +185,8 @@ void main() {
       );
 
       final result = await transport.fetchKeyConfig();
-      expect(result, validKeyConfig());
+      expect(result.bytes, validKeyConfig());
+      expect(result.maxAge, isNull);
     });
 
     test('fetchKeyConfig throws OhttpGatewayException on non-2xx', () async {
@@ -370,6 +371,131 @@ void main() {
       // Should succeed with 300ms timeout
       final result = await transport.fetchKeyConfig();
       expect(result, isNotNull);
+    });
+
+    group('Cache-Control max-age parsing', () {
+      test('parses max-age from Cache-Control header', () async {
+        final client = MockClient(
+          (request) async => Response.bytes(
+            validKeyConfig(),
+            200,
+            headers: {'cache-control': 'public, max-age=300'},
+          ),
+        );
+        final transport = HttpClientTransport.insecureForTesting(
+          client: client,
+          keysUrl: Uri.parse(keysUrl),
+          gatewayUrl: Uri.parse(gatewayUrl),
+        );
+
+        final result = await transport.fetchKeyConfig();
+        expect(result.bytes, validKeyConfig());
+        expect(result.maxAge, const Duration(seconds: 300));
+      });
+
+      test('returns null maxAge when no Cache-Control header', () async {
+        final client = MockClient(
+          (request) async => Response.bytes(validKeyConfig(), 200),
+        );
+        final transport = HttpClientTransport.insecureForTesting(
+          client: client,
+          keysUrl: Uri.parse(keysUrl),
+          gatewayUrl: Uri.parse(gatewayUrl),
+        );
+
+        final result = await transport.fetchKeyConfig();
+        expect(result.maxAge, isNull);
+      });
+
+      test('returns null maxAge for malformed max-age value', () async {
+        final client = MockClient(
+          (request) async => Response.bytes(
+            validKeyConfig(),
+            200,
+            headers: {'cache-control': 'max-age=abc'},
+          ),
+        );
+        final transport = HttpClientTransport.insecureForTesting(
+          client: client,
+          keysUrl: Uri.parse(keysUrl),
+          gatewayUrl: Uri.parse(gatewayUrl),
+        );
+
+        final result = await transport.fetchKeyConfig();
+        expect(result.maxAge, isNull);
+      });
+
+      test('parses max-age=0', () async {
+        final client = MockClient(
+          (request) async => Response.bytes(
+            validKeyConfig(),
+            200,
+            headers: {'cache-control': 'max-age=0'},
+          ),
+        );
+        final transport = HttpClientTransport.insecureForTesting(
+          client: client,
+          keysUrl: Uri.parse(keysUrl),
+          gatewayUrl: Uri.parse(gatewayUrl),
+        );
+
+        final result = await transport.fetchKeyConfig();
+        expect(result.maxAge, Duration.zero);
+      });
+
+      test('returns Duration.zero for no-cache', () async {
+        final client = MockClient(
+          (request) async => Response.bytes(
+            validKeyConfig(),
+            200,
+            headers: {'cache-control': 'no-cache'},
+          ),
+        );
+        final transport = HttpClientTransport.insecureForTesting(
+          client: client,
+          keysUrl: Uri.parse(keysUrl),
+          gatewayUrl: Uri.parse(gatewayUrl),
+        );
+
+        final result = await transport.fetchKeyConfig();
+        expect(result.maxAge, Duration.zero);
+      });
+
+      test('returns Duration.zero for no-store', () async {
+        final client = MockClient(
+          (request) async => Response.bytes(
+            validKeyConfig(),
+            200,
+            headers: {'cache-control': 'no-store'},
+          ),
+        );
+        final transport = HttpClientTransport.insecureForTesting(
+          client: client,
+          keysUrl: Uri.parse(keysUrl),
+          gatewayUrl: Uri.parse(gatewayUrl),
+        );
+
+        final result = await transport.fetchKeyConfig();
+        expect(result.maxAge, Duration.zero);
+      });
+
+      test('no-cache takes precedence over max-age', () async {
+        final client = MockClient(
+          (request) async => Response.bytes(
+            validKeyConfig(),
+            200,
+            headers: {'cache-control': 'max-age=300, no-cache'},
+          ),
+        );
+        final transport = HttpClientTransport.insecureForTesting(
+          client: client,
+          keysUrl: Uri.parse(keysUrl),
+          gatewayUrl: Uri.parse(gatewayUrl),
+        );
+
+        final result = await transport.fetchKeyConfig();
+        expect(result.maxAge, Duration.zero);
+      });
     });
   });
 

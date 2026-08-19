@@ -10,23 +10,23 @@ import 'ohttp_transport.dart';
 /// (single-flight deduplication). A fetch failure is propagated to callers
 /// but does not evict a previously cached stale entry - use [invalidate]
 /// for forced eviction.
-
 class KeyConfigCache {
   final OhttpTransport _transport;
-  final Duration _ttl;
+  final Duration? _ttl;
   final DateTime Function() _now;
   final OhttpObserver? _observer;
 
   /// Creates a TTL cache backed by [transport].
   ///
   /// [now] overrides the clock (defaults to [DateTime.now]).
-  /// [ttl] sets cache lifetime (defaults to 1 hour).
+  /// [ttl] overrides the cache lifetime; when `null`, resolves TTL from [KeyConfigFetchResult.maxAge]
+  /// with [OhttpConstants.fallbackKeyConfigCacheTtl] as fallback.
   /// [observer] receives notifications on fetch and cache-hit events.
   KeyConfigCache({
     required OhttpTransport transport,
     DateTime Function()? now,
     OhttpObserver? observer,
-    Duration ttl = OhttpConstants.defaultKeyConfigCacheTtl,
+    Duration? ttl,
   }) : _transport = transport,
        _ttl = ttl,
        _now = now ?? (() => DateTime.now()),
@@ -55,9 +55,6 @@ class KeyConfigCache {
     _pendingFetch = fetch;
     try {
       final config = await fetch;
-      _cached = config;
-      _expiresAt = _now().add(_ttl);
-      _observer?.notifySafe((o) => o.onKeyConfigFetched());
 
       return config;
     } finally {
@@ -73,10 +70,15 @@ class KeyConfigCache {
   }
 
   Future<OhttpKeyConfig> _fetch() async {
-    final bytes = await _transport.fetchKeyConfig();
-    final config = OhttpKeyConfig.parse(bytes);
+    final result = await _transport.fetchKeyConfig();
+    final config = OhttpKeyConfig.parse(result.bytes);
     config.validate();
+    _cached = config;
+    _expiresAt = _now().add(_resolveTtl(result.maxAge));
+    _observer?.notifySafe((o) => o.onKeyConfigFetched());
 
     return config;
   }
+
+  Duration _resolveTtl(Duration? serverMaxAge) => _ttl ?? serverMaxAge ?? OhttpConstants.fallbackKeyConfigCacheTtl;
 }

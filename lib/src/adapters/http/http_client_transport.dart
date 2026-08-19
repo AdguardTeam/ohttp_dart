@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:meta/meta.dart';
+import 'package:ohttp_dart/src/data/key_config_fetch_result.dart';
 import 'package:ohttp_dart/src/exceptions.dart';
 import 'package:ohttp_dart/src/ohttp_constants.dart';
 import 'package:ohttp_dart/src/ohttp_transport.dart';
@@ -15,6 +16,12 @@ import 'package:ohttp_dart/src/ohttp_transport.dart';
 /// retains ownership of the [http.Client].
 class HttpClientTransport implements OhttpTransport {
   static const _ohttpMediaType = 'message/ohttp-req';
+  static const _cacheControlHeader = 'cache-control';
+
+  // Matches max-age=N (RFC 9111 §5.2.2.1).
+  static final _maxAgePattern = RegExp(r'\bmax-age\s*=\s*(\d+)', caseSensitive: false);
+  // Matches no-cache or no-store (RFC 9111 §5.2.2.4, §5.2.2.5).
+  static final _noCacheOrStorePattern = RegExp(r'\bno-(?:cache|store)\b', caseSensitive: false);
 
   static Duration _validateDuration(Duration value, String name) {
     if (value <= Duration.zero) {
@@ -37,6 +44,30 @@ class HttpClientTransport implements OhttpTransport {
     }
 
     return uri;
+  }
+
+  static Duration? _parseMaxAge(Map<String, String> headers) {
+    final cacheControl = headers[_cacheControlHeader];
+    if (cacheControl == null) {
+      return null;
+    }
+
+    // no-cache / no-store disables caching via zero TTL
+    if (_noCacheOrStorePattern.hasMatch(cacheControl)) {
+      return Duration.zero;
+    }
+
+    final match = _maxAgePattern.firstMatch(cacheControl);
+    if (match == null) {
+      return null;
+    }
+
+    final seconds = int.tryParse(match.group(1)!);
+    if (seconds == null || seconds < 0) {
+      return null;
+    }
+
+    return Duration(seconds: seconds);
   }
 
   final http.Client _client;
@@ -90,7 +121,7 @@ class HttpClientTransport implements OhttpTransport {
        _postToGatewayTimeout = _validateDuration(postToGatewayTimeout, 'postToGatewayTimeout');
 
   @override
-  Future<Uint8List> fetchKeyConfig() async {
+  Future<KeyConfigFetchResult> fetchKeyConfig() async {
     final http.Response response;
     try {
       response = await _client.get(_keysUrl).timeout(_fetchKeyConfigTimeout);
@@ -127,7 +158,10 @@ class HttpClientTransport implements OhttpTransport {
       );
     }
 
-    return response.bodyBytes;
+    return KeyConfigFetchResult(
+      bytes: response.bodyBytes,
+      maxAge: _parseMaxAge(response.headers),
+    );
   }
 
   @override

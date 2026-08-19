@@ -99,6 +99,9 @@ lib/
     ├── ohttp_session.dart              # OHTTP session orchestrator
     ├── ohttp_transport.dart            # Transport abstraction interface
     ├── erasable_byte_array.dart        # Byte buffer that zeroes on erase(), guards post-erase reads
+    ├── ohttp_constants.dart            # Centralized default values
+    ├── data/
+    │   └── key_config_fetch_result.dart # Result type for key config fetch (bytes + TTL)
     └── adapters/
         └── http/
             ├── http_client_transport.dart   # HttpClientTransport implementation
@@ -174,18 +177,28 @@ final response = await session.send(request);
 
 ### Session configuration
 
-`OhttpSession` supports configurable limits for response sizes:
+`OhttpSession` supports configurable limits for response sizes
+and a TTL override for the key config cache:
 
 ```dart
 final session = OhttpSession.withTransport(
   transport: transport,
   maxEncryptedResponseBytes: 32 * 1024 * 1024, // 32 MiB (default: 16 MiB)
+  keyConfigCacheTtl: Duration(minutes: 30),    // optional TTL override
   decryptedResponseLimits: BhttpResponseLimits(
     maxHeaderBytes: 32 * 1024,  // 32 KiB (default: 16 KiB)
     maxBodyBytes: 20 * 1024 * 1024, // 20 MiB (default: 10 MiB)
   ),
 );
 ```
+
+**Key Config Cache TTL resolution** (highest to lowest priority):
+
+1. Explicit `keyConfigCacheTtl` passed to `withTransport` (or `ttl` on `KeyConfigCache`)
+2. Server `max-age` from the `Cache-Control` header
+3. `OhttpConstants.fallbackKeyConfigCacheTtl` (1 hour)
+
+`no-cache` / `no-store` in the server response disables caching (TTL = 0).
 
 For full control over the cache, use the primary constructor:
 
@@ -233,8 +246,9 @@ Implement `OhttpTransport` to integrate with any HTTP client (Dio, etc.):
 ```dart
 class DioTransport implements OhttpTransport {
   @override
-  Future<Uint8List> fetchKeyConfig() async {
+  Future<KeyConfigFetchResult> fetchKeyConfig() async {
     // GET the key config URL, throw OhttpGatewayException on non-2xx
+    // Return KeyConfigFetchResult(bytes: body, maxAge: parsedMaxAge)
   }
 
   @override
@@ -251,7 +265,7 @@ class DioTransport implements OhttpTransport {
 |---------|---------|---------|
 | `cryptography` | 2.9.0 | Pure Dart crypto primitives (X25519, HMAC, AES-GCM) |
 | `http` | 1.6.0 | HTTP client for the `package:http` adapter |
-| `meta` | 1.16.0 | Annotations (`@visibleForTesting`) |
+| `meta` | 1.17.0 | Annotations (`@visibleForTesting`) |
 
 Dev dependencies: `test` 1.25.6, `kiri_check` 1.3.1 (property-based testing), `lints` 3.0.0.
 

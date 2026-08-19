@@ -88,16 +88,21 @@ class OhttpSession {
        _observer = observer,
        _retryOnGatewayError = retryOnGatewayError;
 
-  /// Shortcut that creates a [KeyConfigCache] over [transport] with the
-  /// default TTL.
+  /// Shortcut that creates a [KeyConfigCache] over [transport].
+  /// [keyConfigCacheTtl] overrides cache TTL; defaults to server `max-age` or [OhttpConstants.fallbackKeyConfigCacheTtl].
   OhttpSession.withTransport({
     required OhttpTransport transport,
     OhttpObserver? observer,
+    Duration? keyConfigCacheTtl,
     bool retryOnGatewayError = true,
     int maxEncryptedResponseBytes = OhttpConstants.defaultMaxEncryptedResponseBytes,
     BhttpResponseLimits decryptedResponseLimits = const BhttpResponseLimits(),
   }) : _transport = transport,
-       _cache = KeyConfigCache(transport: transport, observer: observer),
+       _cache = KeyConfigCache(
+         transport: transport,
+         observer: observer,
+         ttl: keyConfigCacheTtl,
+       ),
        _maxEncryptedResponseBytes = _validateMaxEncryptedResponseBytes(maxEncryptedResponseBytes),
        _decryptedResponseLimits = _validateDecryptedResponseLimits(decryptedResponseLimits),
        _observer = observer,

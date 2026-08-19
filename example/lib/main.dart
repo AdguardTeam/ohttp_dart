@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import 'package:ohttp_dart/http.dart';
 import 'package:ohttp_dart/ohttp_dart.dart';
 
@@ -27,7 +29,10 @@ class OhttpApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'OHTTP Flutter Example',
-      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal), useMaterial3: true),
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
+        useMaterial3: true,
+      ),
       home: const OhttpDemoPage(),
     );
   }
@@ -40,20 +45,34 @@ class OhttpDemoPage extends StatefulWidget {
   State<OhttpDemoPage> createState() => _OhttpDemoPageState();
 }
 
-class _OhttpDemoPageState extends State<OhttpDemoPage> with SingleTickerProviderStateMixin {
+class _OhttpDemoPageState extends State<OhttpDemoPage>
+    with SingleTickerProviderStateMixin {
   static const _methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
-  static const _presetPaths = ['/headers', '/ip', '/status/500', '/delay/2', '/anything'];
+  static const _presetPaths = [
+    '/headers',
+    '/ip',
+    '/status/500',
+    '/delay/2',
+    '/anything',
+  ];
 
   /// Smallest height the response tab section may take before the page
   /// starts scrolling vertically instead of squeezing it further.
   static const _minTabSectionHeight = 320.0;
 
   // Gateway presets
-  static final _gateways = <String, ({HttpClientTransport Function(http.Client client) transport, String authority})>{
-    'httpbin': (transport: httpbinTransport, authority: httpbinAuthority),
-  };
+  static final _gateways =
+      <
+        String,
+        ({
+          HttpClientTransport Function(http.Client client) transport,
+          String authority,
+        })
+      >{'httpbin': (transport: httpbinTransport, authority: httpbinAuthority)};
 
-  final _pathController = TextEditingController(text: methodDefaultPaths['GET']);
+  final _pathController = TextEditingController(
+    text: methodDefaultPaths['GET'],
+  );
   final _bodyController = TextEditingController();
   String _method = 'GET';
   bool _loading = false;
@@ -65,10 +84,13 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> with SingleTickerProvider
 
   late final TabController _tabController;
   late http.Client _rawClient;
+  late http.Client _directClient;
   late KeyConfigCache _cache;
   late OhttpSession _session;
   String _authority = httpbinAuthority;
   String _selectedGateway = 'httpbin';
+  bool _proxyEnabled = false;
+  int _proxyPort = 9090;
 
   @override
   void initState() {
@@ -78,13 +100,42 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> with SingleTickerProvider
   }
 
   void _initSession(String name) {
-    _rawClient = http.Client();
+    final useLocal = localGatewayEnabled && _proxyEnabled;
+    final http.Client proxied = _proxyEnabled
+        ? _createProxiedClient('localhost:$_proxyPort')
+        : http.Client();
+
+    _rawClient = useLocal ? _createLocalGatewayClient() : proxied;
+    _directClient = proxied;
     final entry = _gateways[name]!;
     _authority = entry.authority;
-    final observer = LogObserver((level, message) => _addEntry(level, 'OHTTP', message));
-    final transport = entry.transport(_rawClient);
+    final observer = LogObserver(
+      (level, message) => _addEntry(level, 'OHTTP', message),
+    );
+    final transport = useLocal
+        ? localGatewayTransport(_rawClient)
+        : entry.transport(_rawClient);
     _cache = KeyConfigCache(transport: transport, observer: observer);
-    _session = OhttpSession(transport: transport, cache: _cache, observer: observer);
+    _session = OhttpSession(
+      transport: transport,
+      cache: _cache,
+      observer: observer,
+    );
+  }
+
+  // Accepts the self-signed cert generated at runtime by the local Go gateway.
+  http.Client _createLocalGatewayClient() {
+    final ioClient = HttpClient()
+      ..badCertificateCallback = (cert, host, port) => true;
+    return IOClient(ioClient);
+  }
+
+  http.Client _createProxiedClient(String proxyUrl) {
+    final ioClient = HttpClient()..findProxy = (uri) => 'PROXY $proxyUrl';
+    if (kDebugMode) {
+      ioClient.badCertificateCallback = (cert, host, port) => true;
+    }
+    return IOClient(ioClient);
   }
 
   @override
@@ -92,15 +143,22 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> with SingleTickerProvider
     _tabController.dispose();
     _pathController.dispose();
     _bodyController.dispose();
-    _rawClient.close();
+    _closeClients();
     super.dispose();
+  }
+
+  void _closeClients() {
+    _rawClient.close();
+    if (!identical(_directClient, _rawClient)) {
+      _directClient.close();
+    }
   }
 
   void _onGatewayChanged(String? name) {
     if (name == null) {
       return;
     }
-    _rawClient.close();
+    _closeClients();
     setState(() {
       _selectedGateway = name;
       _initSession(name);
@@ -123,18 +181,79 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> with SingleTickerProvider
     });
   }
 
+  void _onProxyToggled(bool value) async {
+    if (value) {
+      final port = await _showProxyPortDialog();
+      if (port == null) return;
+      _proxyPort = port;
+    }
+    _closeClients();
+    setState(() {
+      _proxyEnabled = value;
+      _initSession(_selectedGateway);
+    });
+    _addEntry(
+      LogLevel.info,
+      'proxy',
+      value ? 'Proxy enabled: localhost:$_proxyPort' : 'Proxy disabled',
+    );
+  }
+
+  Future<int?> _showProxyPortDialog() {
+    final controller = TextEditingController(text: '$_proxyPort');
+    return showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Proxy Port'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Port',
+            hintText: '9090',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final port = int.tryParse(controller.text);
+              Navigator.pop(ctx, port);
+            },
+            child: const Text('Enable'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _addEntry(LogLevel level, String source, String message) {
     if (!mounted) {
       return;
     }
     setState(() {
-      _logEntries.add(LogEntry(time: DateTime.now(), level: level, source: source, message: message));
+      _logEntries.add(
+        LogEntry(
+          time: DateTime.now(),
+          level: level,
+          source: source,
+          message: message,
+        ),
+      );
     });
   }
 
   bool get _hasBody => _method != 'GET' && _bodyController.text.isNotEmpty;
 
-  Uint8List _ohttpBody() => _hasBody ? Uint8List.fromList(utf8.encode(_bodyController.text)) : Uint8List(0);
+  Uint8List _ohttpBody() => _hasBody
+      ? Uint8List.fromList(utf8.encode(_bodyController.text))
+      : Uint8List(0);
 
   Future<void> _sendOhttp() async {
     setState(() {
@@ -198,11 +317,15 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> with SingleTickerProvider
 
       final stopwatch = Stopwatch()..start();
       final response = switch (_method) {
-        'GET' => await _rawClient.get(uri, headers: headers),
-        'POST' => await _rawClient.post(uri, headers: headers, body: body),
-        'PUT' => await _rawClient.put(uri, headers: headers, body: body),
-        'PATCH' => await _rawClient.patch(uri, headers: headers, body: body),
-        'DELETE' => await _rawClient.delete(uri, headers: headers, body: body),
+        'GET' => await _directClient.get(uri, headers: headers),
+        'POST' => await _directClient.post(uri, headers: headers, body: body),
+        'PUT' => await _directClient.put(uri, headers: headers, body: body),
+        'PATCH' => await _directClient.patch(uri, headers: headers, body: body),
+        'DELETE' => await _directClient.delete(
+          uri,
+          headers: headers,
+          body: body,
+        ),
         _ => throw StateError('Unsupported method: $_method'),
       };
       stopwatch.stop();
@@ -220,7 +343,11 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> with SingleTickerProvider
         _directResponse = responseData;
         _directElapsed = stopwatch.elapsed;
       });
-      _addEntry(LogLevel.success, 'direct', 'Direct response: HTTP ${responseData.statusCode}');
+      _addEntry(
+        LogLevel.success,
+        'direct',
+        'Direct response: HTTP ${responseData.statusCode}',
+      );
     } catch (e) {
       _addEntry(LogLevel.error, 'direct', 'ERROR: $e');
     } finally {
@@ -247,7 +374,9 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> with SingleTickerProvider
   PrivacyFacts? _factsOf(OhttpResponseData? response) {
     if (response == null) return null;
 
-    return extractPrivacyFacts(utf8.decode(response.body, allowMalformed: true));
+    return extractPrivacyFacts(
+      utf8.decode(response.body, allowMalformed: true),
+    );
   }
 
   @override
@@ -269,16 +398,29 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> with SingleTickerProvider
                     // Gateway selector + key-rotation demo action
                     Row(
                       children: [
-                        const Text('Gateway: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const Text(
+                          'Gateway: ',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                         const SizedBox(width: 8),
                         DropdownButton<String>(
                           value: _selectedGateway,
                           items: _gateways.keys
-                              .map((name) => DropdownMenuItem(value: name, child: Text(name)))
+                              .map(
+                                (name) => DropdownMenuItem(
+                                  value: name,
+                                  child: Text(name),
+                                ),
+                              )
                               .toList(),
                           onChanged: _loading ? null : _onGatewayChanged,
                         ),
                         const Spacer(),
+                        Text(_proxyEnabled ? 'Proxy: $_proxyPort' : 'Proxy'),
+                        Switch(
+                          value: _proxyEnabled,
+                          onChanged: _loading ? null : _onProxyToggled,
+                        ),
                         IconButton(
                           icon: const Icon(Icons.key_off),
                           tooltip: 'Invalidate cached key config',
@@ -293,7 +435,12 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> with SingleTickerProvider
                       children: [
                         DropdownButton<String>(
                           value: _method,
-                          items: _methods.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                          items: _methods
+                              .map(
+                                (m) =>
+                                    DropdownMenuItem(value: m, child: Text(m)),
+                              )
+                              .toList(),
                           onChanged: _loading ? null : _onMethodChanged,
                         ),
                         const SizedBox(width: 12),
@@ -320,7 +467,11 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> with SingleTickerProvider
                           for (final preset in _presetPaths) ...[
                             ActionChip(
                               label: Text(preset),
-                              onPressed: _loading ? null : () => setState(() => _pathController.text = preset),
+                              onPressed: _loading
+                                  ? null
+                                  : () => setState(
+                                      () => _pathController.text = preset,
+                                    ),
                             ),
                             const SizedBox(width: 8),
                           ],
@@ -371,12 +522,18 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> with SingleTickerProvider
                     ),
 
                     if (_loading)
-                      const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: LinearProgressIndicator()),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: LinearProgressIndicator(),
+                      ),
 
                     const SizedBox(height: 12),
 
                     if (_logEntries.isNotEmpty) ...[
-                      LogPanel(entries: _logEntries, onClear: () => setState(_logEntries.clear)),
+                      LogPanel(
+                        entries: _logEntries,
+                        onClear: () => setState(_logEntries.clear),
+                      ),
                       const SizedBox(height: 12),
                     ],
                   ],
@@ -409,9 +566,18 @@ class _OhttpDemoPageState extends State<OhttpDemoPage> with SingleTickerProvider
                             child: TabBarView(
                               controller: _tabController,
                               children: [
-                                ResponseView(response: _ohttpResponse, elapsed: _ohttpElapsed),
-                                ResponseView(response: _directResponse, elapsed: _directElapsed),
-                                CompareView(ohttp: _factsOf(_ohttpResponse), direct: _factsOf(_directResponse)),
+                                ResponseView(
+                                  response: _ohttpResponse,
+                                  elapsed: _ohttpElapsed,
+                                ),
+                                ResponseView(
+                                  response: _directResponse,
+                                  elapsed: _directElapsed,
+                                ),
+                                CompareView(
+                                  ohttp: _factsOf(_ohttpResponse),
+                                  direct: _factsOf(_directResponse),
+                                ),
                               ],
                             ),
                           ),

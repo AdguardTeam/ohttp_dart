@@ -24,13 +24,13 @@ class _FakeTransport implements OhttpTransport {
   Object? postError;
 
   @override
-  Future<Uint8List> fetchKeyConfig() async {
+  Future<KeyConfigFetchResult> fetchKeyConfig() async {
     fetchCount++;
     if (fetchError != null) {
       throw fetchError!;
     }
 
-    return config;
+    return KeyConfigFetchResult(bytes: config);
   }
 
   @override
@@ -299,6 +299,24 @@ void main() {
         ),
         throwsA(isA<OhttpConfigException>()),
       );
+    });
+
+    test('withTransport forwards keyConfigCacheTtl to cache', () async {
+      final ttlSession = OhttpSession.withTransport(
+        transport: transport,
+        keyConfigCacheTtl: const Duration(milliseconds: 50),
+      );
+
+      // First send fetches the key config.
+      await expectLater(ttlSession.send(request), throwsA(anything));
+      expect(transport.fetchCount, 1);
+
+      // Wait for the short TTL to expire
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+
+      // Second send must re-fetch because the TTL has expired.
+      await expectLater(ttlSession.send(request), throwsA(anything));
+      expect(transport.fetchCount, 2);
     });
   });
 

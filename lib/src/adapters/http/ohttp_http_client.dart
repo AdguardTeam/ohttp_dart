@@ -48,7 +48,7 @@ class OhttpHttpClient extends BaseClient {
     required Uri keysUrl,
     required Uri gatewayUrl,
     OhttpObserver? observer,
-    Duration keyConfigCacheTtl = OhttpConstants.defaultKeyConfigCacheTtl,
+    Duration? keyConfigCacheTtl,
     Duration fetchKeyConfigTimeout = OhttpConstants.defaultFetchKeyConfigTimeout,
     Duration postToGatewayTimeout = OhttpConstants.defaultPostToGatewayTimeout,
     bool retryOnGatewayError = true,
