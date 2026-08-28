@@ -19,15 +19,15 @@ class LogObserver extends OhttpObserver {
       onEvent(LogLevel.info, 'Using cached KeyConfig');
 
   @override
-  void onPostToGateway() => onEvent(LogLevel.info, 'Sending to OHTTP gateway');
+  void onPostToRelay() => onEvent(LogLevel.info, 'Sending to OHTTP relay');
 
   @override
   void onDecapsulationError(Type errorType) =>
       onEvent(LogLevel.error, 'Decapsulation error: $errorType');
 
   @override
-  void onGatewayError(int statusCode) =>
-      onEvent(LogLevel.error, 'Gateway error: HTTP $statusCode');
+  void onRelayError(int statusCode) =>
+      onEvent(LogLevel.error, 'Relay error: HTTP $statusCode');
 
   @override
   void onCacheInvalidated() =>
@@ -38,8 +38,8 @@ class LogObserver extends OhttpObserver {
       onEvent(LogLevel.error, 'Encapsulation error: $errorType');
 
   @override
-  void onGatewayRetry() =>
-      onEvent(LogLevel.warning, 'Retrying after gateway error');
+  void onRelayRetry() =>
+      onEvent(LogLevel.warning, 'Retrying after relay error');
 
   @override
   void onRoundTripCompleted(Duration elapsed) =>

@@ -28,8 +28,8 @@ consumers using `package:http`.
 
 `OhttpSession` orchestrates the full pipeline: cache lookup → BHTTP
 serialization → OHTTP encapsulation → transport call → decapsulation →
-BHTTP parsing. Cache invalidation happens automatically on gateway errors.
-When `retryOnGatewayError` is enabled (the default), a single automatic
+BHTTP parsing. Cache invalidation happens automatically on relay errors.
+When `retryOnRelayError` is enabled (the default), a single automatic
 retry is performed with a freshly fetched key config.
 
 ### Observer Pattern
@@ -45,13 +45,13 @@ class MyObserver extends OhttpObserver {
   void onKeyConfigCacheHit() => print('Using cached key config');
 
   @override
-  void onPostToGateway() => print('Posting to gateway');
+  void onPostToRelay() => print('Posting to relay');
 
   @override
   void onDecapsulationError(Type errorType) => print('Decapsulation failed: $errorType');
 
   @override
-  void onGatewayError(int statusCode) => print('Gateway error: $statusCode');
+  void onRelayError(int statusCode) => print('Relay error: $statusCode');
 
   @override
   void onCacheInvalidated() => print('Cache invalidated');
@@ -60,7 +60,7 @@ class MyObserver extends OhttpObserver {
   void onEncapsulationError(Type errorType) => print('Encapsulation failed: $errorType');
 
   @override
-  void onGatewayRetry() => print('Retrying after gateway error');
+  void onRelayRetry() => print('Retrying after relay error');
 
   @override
   void onRoundTripCompleted(Duration elapsed) => print('Round trip completed in $elapsed');
@@ -130,7 +130,7 @@ Specific exception types:
 | `OhttpUnsupportedSuiteException` | KeyConfig advertises only unsupported KEM/KDF/AEAD |
 | `OhttpKeyConfigException` | Structurally malformed KeyConfig binary data (too short, wrong lengths, trailing data) |
 | `OhttpFormatException` | Malformed BHTTP data (wrong framing indicator, truncated fields, invalid varint) |
-| `OhttpGatewayException` | Gateway returned non-2xx response (includes `statusCode`; triggers cache invalidation) |
+| `OhttpRelayException` | Relay returned non-2xx response (includes `statusCode`; triggers cache invalidation) |
 | `OhttpDecapsulationException` | OHTTP response decapsulation failure (response too short, ciphertext too short for GCM tag) |
 | `OhttpCryptoException` | AES-GCM / HPKE crypto failure (includes optional `cause`) |
 | `OhttpSizeLimitException` | Response exceeds configured size limits (includes `limit` and `actualSize`) |
@@ -151,7 +151,7 @@ final raw = http.Client();
 final transport = HttpClientTransport(
   client: raw,
   keysUrl: Uri.parse('https://gateway.example.com/ohttp/config'),
-  gatewayUrl: Uri.parse('https://gateway.example.com/ohttp/gateway'),
+  relayUrl: Uri.parse('https://relay.example.com/ohttp/relay'),
 );
 final session = OhttpSession.withTransport(transport: transport);
 final client = OhttpHttpClient(session: session, closeWith: raw);
@@ -223,9 +223,9 @@ configurable timeouts:
 final transport = HttpClientTransport(
   client: httpClient,
   keysUrl: Uri.parse('https://gateway.example.com/ohttp/config'),
-  gatewayUrl: Uri.parse('https://gateway.example.com/ohttp/gateway'),
+  relayUrl: Uri.parse('https://relay.example.com/ohttp/relay'),
   fetchKeyConfigTimeout: Duration(seconds: 10),  // default: 30s
-  postToGatewayTimeout: Duration(seconds: 15),   // default: 30s
+  postToRelayTimeout: Duration(seconds: 15),     // default: 30s
 );
 ```
 
@@ -235,7 +235,7 @@ For testing with non-HTTPS endpoints (e.g., `MockClient` with `http://localhost`
 final transport = HttpClientTransport.insecureForTesting(
   client: mockClient,
   keysUrl: Uri.parse('http://localhost:8080/keys'),
-  gatewayUrl: Uri.parse('http://localhost:8080/gateway'),
+  relayUrl: Uri.parse('http://localhost:8080/relay'),
 );
 ```
 
@@ -247,14 +247,14 @@ Implement `OhttpTransport` to integrate with any HTTP client (Dio, etc.):
 class DioTransport implements OhttpTransport {
   @override
   Future<KeyConfigFetchResult> fetchKeyConfig() async {
-    // GET the key config URL, throw OhttpGatewayException on non-2xx
+    // GET the key config URL, throw OhttpRelayException on non-2xx
     // Return KeyConfigFetchResult(bytes: body, maxAge: parsedMaxAge)
   }
 
   @override
-  Future<Uint8List> postToGateway(Uint8List body) async {
-    // POST to gateway with Content-Type: message/ohttp-req
-    // throw OhttpGatewayException on non-2xx
+  Future<Uint8List> postToRelay(Uint8List body) async {
+    // POST to relay with Content-Type: message/ohttp-req
+    // throw OhttpRelayException on non-2xx
   }
 }
 ```

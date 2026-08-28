@@ -5,7 +5,7 @@ Flutter example app demonstrating [Oblivious HTTP (RFC 9458)](https://www.ietf.o
 ## Architecture
 
 ```
-Flutter UI ──► OhttpSession ──► HttpClientTransport ──► OHTTP Gateway
+Flutter UI ──► OhttpSession ──► HttpClientTransport ──► OHTTP Relay
                     │                          │
                     │                          ├─ GET /ohttp/config   (KeyConfig)
                     │                          ├─ POST /ohttp/gateway (encrypted request)
@@ -22,7 +22,7 @@ Flutter UI ──► OhttpSession ──► HttpClientTransport ──► OHTTP 
 1. `GET /ohttp/config` — fetch gateway's KeyConfig (public key + HPKE params)
 2. Serialize HTTP request to [BHTTP (RFC 9292)](https://www.ietf.org/rfc/rfc9292.html)
 3. Encrypt BHTTP message with [HPKE (RFC 9180)](https://www.ietf.org/rfc/rfc9180.html) using gateway's public key
-4. `POST /ohttp/gateway` — send encrypted request
+4. `POST /ohttp/gateway` — send encrypted request to the relay
 5. Decrypt and deserialize the response
 
 ## Tech Stack
@@ -43,7 +43,7 @@ Flutter UI ──► OhttpSession ──► HttpClientTransport ──► OHTTP 
 lib/
 ├── main.dart                     # Flutter UI — OHTTP demo screen
 ├── src/
-│   ├── gateways.dart             # Gateway transport factories
+│   ├── relays.dart               # Relay transport factories
 │   ├── log_entry.dart            # Log entry model (level, source, message)
 │   ├── log_observer.dart         # OhttpObserver → typed log events
 │   ├── log_panel.dart            # Color-coded, auto-scrolling log list
@@ -93,7 +93,7 @@ The gateway is in `scripts/local_ohttp_gw/`; env overrides are in `config/dev_lo
 Uses [AdguardTeam/HttpBin](https://github.com/AdguardTeam/HttpBin) deployed at `https://httpbin.agrd.workers.dev/`:
 
 - `GET /ohttp/config` — OHTTP KeyConfig (41 bytes, KEM=X25519, KDF=HKDF-SHA256, AEAD=AES-128-GCM)
-- `POST /ohttp/gateway` — OHTTP gateway (accepts `message/ohttp-req`)
+- `POST /ohttp/gateway` — OHTTP relay endpoint (accepts `message/ohttp-req`)
 
 ## Library Architecture
 

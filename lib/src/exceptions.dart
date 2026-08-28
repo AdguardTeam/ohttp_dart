@@ -38,19 +38,19 @@ class OhttpKeyConfigException extends OhttpException {
   const OhttpKeyConfigException(super.message, {super.stackTrace});
 }
 
-/// Thrown by [OhttpTransport] implementations when the gateway returns
+/// Thrown by [OhttpTransport] implementations when the relay returns
 /// a non-2xx response.
-class OhttpGatewayException extends OhttpException {
+class OhttpRelayException extends OhttpException {
   final int statusCode;
 
-  const OhttpGatewayException({
+  const OhttpRelayException({
     super.stackTrace,
     required this.statusCode,
     required String message,
   }) : super(message);
 
   @override
-  String get baseMessage => 'OhttpGatewayException($statusCode): $message';
+  String get baseMessage => 'OhttpRelayException($statusCode): $message';
 }
 
 /// Thrown when a cryptographic operation fails (AEAD authentication error,

@@ -29,7 +29,7 @@ void main() {
       final transport = HttpClientTransport.insecureForTesting(
         client: mockClient,
         keysUrl: Uri.parse(testKeysUrl),
-        gatewayUrl: Uri.parse(testGatewayUrl),
+        relayUrl: Uri.parse(testRelayUrl),
       );
       final client = OhttpHttpClient(
         session: OhttpSession.withTransport(transport: transport, observer: observer),
@@ -41,9 +41,9 @@ void main() {
       expect(response.statusCode, 200);
       expect(utf8.decode(body), 'hello');
       expect(observer.keyConfigFetched, isTrue, reason: 'onKeyConfigFetched must fire on cache miss');
-      expect(observer.postToGateway, isTrue, reason: 'onPostToGateway must fire before the POST');
+      expect(observer.postToRelay, isTrue, reason: 'onPostToRelay must fire before the POST');
       expect(observer.keyConfigCacheHit, isFalse, reason: 'first call is always a miss');
-      expect(observer.gatewayError, isFalse);
+      expect(observer.relayError, isFalse);
       expect(observer.decapsulationError, isFalse);
       expect(observer.encapsulationError, isFalse);
       expect(observer.roundTripCompleted, isTrue, reason: 'onRoundTripCompleted must fire on success');
@@ -66,7 +66,7 @@ void main() {
       final transport = HttpClientTransport.insecureForTesting(
         client: mockClient,
         keysUrl: Uri.parse(testKeysUrl),
-        gatewayUrl: Uri.parse(testGatewayUrl),
+        relayUrl: Uri.parse(testRelayUrl),
       );
       final client = OhttpHttpClient(
         session: OhttpSession.withTransport(transport: transport),
@@ -106,7 +106,7 @@ void main() {
       final transport = HttpClientTransport.insecureForTesting(
         client: mockClient,
         keysUrl: Uri.parse(testKeysUrl),
-        gatewayUrl: Uri.parse(testGatewayUrl),
+        relayUrl: Uri.parse(testRelayUrl),
       );
       final client = OhttpHttpClient(
         session: OhttpSession.withTransport(transport: transport),
@@ -144,7 +144,7 @@ void main() {
 
           return Response.bytes(keyConfigBytes, 200);
         }
-        if (request.method == 'POST' && request.url.toString() == testGatewayUrl) {
+        if (request.method == 'POST' && request.url.toString() == testRelayUrl) {
           return gatewayHandlerFor(request, bhttpResponseBytes);
         }
 
@@ -155,7 +155,7 @@ void main() {
       final transport = HttpClientTransport.insecureForTesting(
         client: mockClient,
         keysUrl: Uri.parse(testKeysUrl),
-        gatewayUrl: Uri.parse(testGatewayUrl),
+        relayUrl: Uri.parse(testRelayUrl),
       );
       final client = OhttpHttpClient(
         session: OhttpSession.withTransport(transport: transport, observer: observer),
@@ -176,7 +176,7 @@ void main() {
     // Failure-path tests (phase 4)
     // -----------------------------------------------------------------------
 
-    test('gateway 503 throws OhttpGatewayException and invalidates the cache', () async {
+    test('relay 503 throws OhttpRelayException and invalidates the cache', () async {
       final keyConfigBytes = defaultKeyConfigBytes();
       var keysGetCount = 0;
       final mockClient = MockClient((request) async {
@@ -192,30 +192,30 @@ void main() {
       final transport = HttpClientTransport.insecureForTesting(
         client: mockClient,
         keysUrl: Uri.parse(testKeysUrl),
-        gatewayUrl: Uri.parse(testGatewayUrl),
+        relayUrl: Uri.parse(testRelayUrl),
       );
       final client = OhttpHttpClient(
         session: OhttpSession.withTransport(
           transport: transport,
           observer: observer,
-          retryOnGatewayError: false,
+          retryOnRelayError: false,
         ),
       );
 
-      // First send → OhttpGatewayException; cache must be invalidated.
+      // First send → OhttpRelayException; cache must be invalidated.
       await expectLater(
         client.send(Request('GET', Uri.parse('https://example.com/'))),
-        throwsA(isA<OhttpGatewayException>().having((e) => e.statusCode, 'statusCode', 503)),
+        throwsA(isA<OhttpRelayException>().having((e) => e.statusCode, 'statusCode', 503)),
       );
       expect(keysGetCount, 1);
-      expect(observer.gatewayError, isTrue);
-      expect(observer.lastGatewayErrorStatus, 503);
+      expect(observer.relayError, isTrue);
+      expect(observer.lastRelayErrorStatus, 503);
       expect(observer.cacheInvalidated, isTrue);
 
       // Second send → must re-fetch keysUrl because the cache was invalidated.
       await expectLater(
         client.send(Request('GET', Uri.parse('https://example.com/'))),
-        throwsA(isA<OhttpGatewayException>()),
+        throwsA(isA<OhttpRelayException>()),
       );
       expect(keysGetCount, 2, reason: 'cache invalidation must trigger a second GET to keysUrl');
     });
@@ -224,7 +224,7 @@ void main() {
       final keyConfigBytes = defaultKeyConfigBytes();
       final bhttpResponseBytes = buildBhttpResponse(utf8.encode('recovered'));
       var keysGetCount = 0;
-      var gatewayPostCount = 0;
+      var relayPostCount = 0;
 
       final mockClient = MockClient((request) async {
         if (request.method == 'GET' && request.url.toString() == testKeysUrl) {
@@ -232,9 +232,9 @@ void main() {
 
           return Response.bytes(keyConfigBytes, 200);
         }
-        if (request.method == 'POST' && request.url.toString() == testGatewayUrl) {
-          gatewayPostCount++;
-          if (gatewayPostCount == 1) {
+        if (request.method == 'POST' && request.url.toString() == testRelayUrl) {
+          relayPostCount++;
+          if (relayPostCount == 1) {
             return Response('', 503);
           }
 
@@ -248,7 +248,7 @@ void main() {
       final transport = HttpClientTransport.insecureForTesting(
         client: mockClient,
         keysUrl: Uri.parse(testKeysUrl),
-        gatewayUrl: Uri.parse(testGatewayUrl),
+        relayUrl: Uri.parse(testRelayUrl),
       );
       final client = OhttpHttpClient(
         session: OhttpSession.withTransport(
@@ -262,10 +262,10 @@ void main() {
 
       expect(response.statusCode, 200);
       expect(utf8.decode(body), 'recovered');
-      expect(gatewayPostCount, 2, reason: 'first attempt failed with 503, second succeeded');
+      expect(relayPostCount, 2, reason: 'first attempt failed with 503, second succeeded');
       expect(keysGetCount, 2, reason: 'keys re-fetched after cache invalidation');
-      expect(observer.gatewayError, isTrue);
-      expect(observer.lastGatewayErrorStatus, 503);
+      expect(observer.relayError, isTrue);
+      expect(observer.lastRelayErrorStatus, 503);
       expect(observer.cacheInvalidated, isTrue);
       expect(observer.roundTripCompleted, isTrue);
     });
@@ -291,7 +291,7 @@ void main() {
       final transport = HttpClientTransport.insecureForTesting(
         client: mockClient,
         keysUrl: Uri.parse(testKeysUrl),
-        gatewayUrl: Uri.parse(testGatewayUrl),
+        relayUrl: Uri.parse(testRelayUrl),
       );
       final client = OhttpHttpClient(
         session: OhttpSession.withTransport(transport: transport, observer: observer),
@@ -317,7 +317,7 @@ void main() {
       final transport = HttpClientTransport.insecureForTesting(
         client: mockClient,
         keysUrl: Uri.parse(testKeysUrl),
-        gatewayUrl: Uri.parse(testGatewayUrl),
+        relayUrl: Uri.parse(testRelayUrl),
       );
       final client = OhttpHttpClient(
         session: OhttpSession.withTransport(transport: transport, observer: observer),
@@ -330,9 +330,9 @@ void main() {
       expect(observer.decapsulationError, isTrue);
     });
 
-    test('gateway POST delay exceeds timeout throws OhttpTimeoutException', () async {
+    test('relay POST delay exceeds timeout throws OhttpTimeoutException', () async {
       final keyConfigBytes = defaultKeyConfigBytes();
-      // Gateway delays 2 s — 20× the 100 ms transport timeout — to absorb CI variance.
+      // Relay delays 2 s — 20× the 100 ms transport timeout — to absorb CI variance.
       final mockClient = buildMockClient(
         keyConfigBytes: keyConfigBytes,
         gatewayHandler: (request) async {
@@ -344,8 +344,8 @@ void main() {
       final transport = HttpClientTransport.insecureForTesting(
         client: mockClient,
         keysUrl: Uri.parse(testKeysUrl),
-        gatewayUrl: Uri.parse(testGatewayUrl),
-        postToGatewayTimeout: const Duration(milliseconds: 100),
+        relayUrl: Uri.parse(testRelayUrl),
+        postToRelayTimeout: const Duration(milliseconds: 100),
       );
       final client = OhttpHttpClient(
         session: OhttpSession.withTransport(transport: transport),
@@ -367,7 +367,7 @@ void main() {
       final transport = HttpClientTransport.insecureForTesting(
         client: mockClient,
         keysUrl: Uri.parse(testKeysUrl),
-        gatewayUrl: Uri.parse(testGatewayUrl),
+        relayUrl: Uri.parse(testRelayUrl),
       );
       final client = OhttpHttpClient(
         session: OhttpSession.withTransport(
@@ -398,7 +398,7 @@ void main() {
       final transport = HttpClientTransport.insecureForTesting(
         client: mockClient,
         keysUrl: Uri.parse(testKeysUrl),
-        gatewayUrl: Uri.parse(testGatewayUrl),
+        relayUrl: Uri.parse(testRelayUrl),
       );
       final client = OhttpHttpClient(
         session: OhttpSession.withTransport(
@@ -432,7 +432,7 @@ void main() {
       final transport = HttpClientTransport.insecureForTesting(
         client: mockClient,
         keysUrl: Uri.parse(testKeysUrl),
-        gatewayUrl: Uri.parse(testGatewayUrl),
+        relayUrl: Uri.parse(testRelayUrl),
       );
       final observer = PipelineTestObserver();
       final client = OhttpHttpClient(
@@ -444,7 +444,7 @@ void main() {
         throwsA(isA<OhttpUnsupportedSuiteException>()),
       );
       expect(observer.encapsulationError, isFalse);
-      expect(observer.postToGateway, isFalse);
+      expect(observer.postToRelay, isFalse);
     });
   });
 }

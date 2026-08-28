@@ -17,13 +17,13 @@ import '../test_utils.dart';
 final class PipelineTestObserver extends OhttpObserver {
   bool keyConfigFetched = false;
   bool keyConfigCacheHit = false;
-  bool postToGateway = false;
-  bool gatewayError = false;
+  bool postToRelay = false;
+  bool relayError = false;
   bool cacheInvalidated = false;
   bool decapsulationError = false;
   bool encapsulationError = false;
   bool roundTripCompleted = false;
-  int? lastGatewayErrorStatus;
+  int? lastRelayErrorStatus;
   Type? lastDecapsulationErrorType;
   Type? lastEncapsulationErrorType;
   Duration? lastRoundTripElapsed;
@@ -35,12 +35,12 @@ final class PipelineTestObserver extends OhttpObserver {
   void onKeyConfigCacheHit() => keyConfigCacheHit = true;
 
   @override
-  void onPostToGateway() => postToGateway = true;
+  void onPostToRelay() => postToRelay = true;
 
   @override
-  void onGatewayError(int statusCode) {
-    gatewayError = true;
-    lastGatewayErrorStatus = statusCode;
+  void onRelayError(int statusCode) {
+    relayError = true;
+    lastRelayErrorStatus = statusCode;
   }
 
   @override
@@ -70,15 +70,15 @@ final class PipelineTestObserver extends OhttpObserver {
 // ---------------------------------------------------------------------------
 
 const testKeysUrl = 'http://test.local/keys';
-const testGatewayUrl = 'http://test.local/gateway';
+const testRelayUrl = 'http://test.local/relay';
 
 // ---------------------------------------------------------------------------
 // MockClient builder
 // ---------------------------------------------------------------------------
 
 /// Returns a [MockClient] routing:
-///   GET  [testKeysUrl]    → 200, body = [keyConfigBytes]
-///   POST [testGatewayUrl] → [gatewayHandler](request)
+///   GET  [testKeysUrl]   → 200, body = [keyConfigBytes]
+///   POST [testRelayUrl]  → [gatewayHandler](request)
 MockClient buildMockClient({
   required Uint8List keyConfigBytes,
   required Future<Response> Function(Request) gatewayHandler,
@@ -86,7 +86,7 @@ MockClient buildMockClient({
   if (request.method == 'GET' && request.url.toString() == testKeysUrl) {
     return Response.bytes(keyConfigBytes, 200);
   }
-  if (request.method == 'POST' && request.url.toString() == testGatewayUrl) {
+  if (request.method == 'POST' && request.url.toString() == testRelayUrl) {
     return gatewayHandler(request);
   }
 

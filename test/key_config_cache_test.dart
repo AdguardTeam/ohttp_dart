@@ -27,7 +27,7 @@ class _FakeTransport implements OhttpTransport {
   }
 
   @override
-  Future<Uint8List> postToGateway(Uint8List body) async {
+  Future<Uint8List> postToRelay(Uint8List body) async {
     throw UnimplementedError();
   }
 }

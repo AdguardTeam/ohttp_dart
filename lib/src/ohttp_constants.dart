@@ -6,10 +6,10 @@ abstract final class OhttpConstants {
   /// Default timeout for fetching the key config from the gateway.
   static const defaultFetchKeyConfigTimeout = Duration(seconds: 30);
 
-  /// Default timeout for posting an encapsulated request to the gateway.
-  static const defaultPostToGatewayTimeout = Duration(seconds: 30);
+  /// Default timeout for posting an encapsulated request to the relay.
+  static const defaultPostToRelayTimeout = Duration(seconds: 30);
 
-  /// Default limit for raw encrypted response body from the gateway.
+  /// Default limit for raw encrypted response body from the relay.
   ///
   /// Accounts for BHTTP body plus OHTTP/BHTTP overhead
   /// (nonce, AEAD tag, framing, headers).

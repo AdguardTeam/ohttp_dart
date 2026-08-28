@@ -8,34 +8,34 @@ abstract class OhttpObserver {
   /// Called when a cached [OhttpKeyConfig] was reused (no network request).
   void onKeyConfigCacheHit() {}
 
-  /// Called right before posting the encapsulated request to the gateway.
-  void onPostToGateway() {}
+  /// Called right before posting the encapsulated request to the relay.
+  void onPostToRelay() {}
 
   /// Called when response decapsulation fails.
   /// [errorType] is the runtime type of the exception (e.g. [OhttpDecapsulationException]).
   void onDecapsulationError(Type errorType) {}
 
-  /// Called when the gateway returns an error response (non-2xx status).
+  /// Called when the relay returns an error response (non-2xx status).
   /// The cache is invalidated automatically after this event.
-  /// [statusCode] is the HTTP status code returned by the gateway.
-  void onGatewayError(int statusCode) {}
+  /// [statusCode] is the HTTP status code returned by the relay.
+  void onRelayError(int statusCode) {}
 
-  /// Called when the cached [OhttpKeyConfig] is invalidated due to a gateway error.
-  /// This event is always fired immediately after [onGatewayError].
+  /// Called when the cached [OhttpKeyConfig] is invalidated due to a relay error.
+  /// This event is always fired immediately after [onRelayError].
   void onCacheInvalidated() {}
 
-  /// Called when request encapsulation fails (before posting to the gateway).
+  /// Called when request encapsulation fails (before posting to the relay).
   /// [errorType] is the runtime type of the exception (e.g. [OhttpUnsupportedSuiteException]).
   void onEncapsulationError(Type errorType) {}
 
-  /// Called when a gateway error triggers an automatic retry with a refreshed
-  /// key config. Fired after [onGatewayError] and [onCacheInvalidated], before the second attempt.
-  void onGatewayRetry() {}
+  /// Called when a relay error triggers an automatic retry with a refreshed
+  /// key config. Fired after [onRelayError] and [onCacheInvalidated], before the second attempt.
+  void onRelayRetry() {}
 
   /// Called after a successful round trip, just before the response is returned.
   ///
   /// [elapsed] covers the full [OhttpSession.send] call: BHTTP serialisation,
-  /// encapsulation, gateway POST (plus retry if it happened), decapsulation,
+  /// encapsulation, relay POST (plus retry if it happened), decapsulation,
   /// and BHTTP parsing. Not fired when [OhttpSession.send] throws.
   void onRoundTripCompleted(Duration elapsed) {}
 
@@ -67,6 +67,6 @@ enum OhttpRequestStage {
   /// The key-config fetch ([OhttpTransport.fetchKeyConfig]) was in flight.
   keyConfigFetch,
 
-  /// The encapsulated POST ([OhttpTransport.postToGateway]) was in flight.
-  gatewayPost,
+  /// The encapsulated POST ([OhttpTransport.postToRelay]) was in flight.
+  relayPost,
 }
