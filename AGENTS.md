@@ -90,7 +90,7 @@ ohttp_dart/
 
 ### Core Concepts
 
-- **OHTTP (RFC 9458)**: Oblivious HTTP protocol for privacy-preserving requests via gateway
+- **OHTTP (RFC 9458)**: Oblivious HTTP protocol for privacy-preserving requests via a relay to a gateway
 - **HPKE (RFC 9180)**: Hybrid Public Key Encryption used for request encryption
 - **BHTTP (RFC 9292)**: Binary HTTP format for serializing HTTP messages
 - **Cipher Suite**: DHKEM(X25519, HKDF-SHA256) + HKDF-SHA256 + AES-128-GCM

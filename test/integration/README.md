@@ -4,7 +4,7 @@ These are pure-Dart, VM-run hermetic `package:test` tests (run by `dart test`) �
 
 ## Stub approach
 
-Gateway requests are handled by a `MockClient` from `package:http/testing.dart` (available transitively via `http: 1.6.0` — no new dependency). The mock client:
+Relay requests are handled by a `MockClient` from `package:http/testing.dart` (available transitively via `http: 1.6.0` — no new dependency). The mock client:
 
 - Responds to `keysUrl` with a synthetic `OhttpKeyConfig` built from the fixed keypair in `test/stubs/gateway_stub.dart`.
 - Responds to `relayUrl` POSTs using `decapExportedSecret` (HPKE KEM Decap) + `sealBhttpResponse` (HKDF + AES-128-GCM per RFC 9458 §4.6.2) from `test/stubs/gateway_stub.dart`. The stub also exposes `openEncapsulatedRequest`, which derives the HPKE request AEAD key and decrypts the inner BHTTP request ciphertext (used by the request-content round-trip test).
