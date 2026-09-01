@@ -130,6 +130,7 @@ Specific exception types:
 | `OhttpUnsupportedSuiteException` | KeyConfig advertises only unsupported KEM/KDF/AEAD |
 | `OhttpKeyConfigException` | Structurally malformed KeyConfig binary data (too short, wrong lengths, trailing data) |
 | `OhttpFormatException` | Malformed BHTTP data (wrong framing indicator, truncated fields, invalid varint) |
+| `OhttpGatewayException` | Gateway returned non-2xx response to a key config request |
 | `OhttpRelayException` | Relay returned non-2xx response (includes `statusCode`; triggers cache invalidation) |
 | `OhttpDecapsulationException` | OHTTP response decapsulation failure (response too short, ciphertext too short for GCM tag) |
 | `OhttpCryptoException` | AES-GCM / HPKE crypto failure (includes optional `cause`) |
@@ -247,7 +248,7 @@ Implement `OhttpTransport` to integrate with any HTTP client (Dio, etc.):
 class DioTransport implements OhttpTransport {
   @override
   Future<KeyConfigFetchResult> fetchKeyConfig() async {
-    // GET the key config URL, throw OhttpRelayException on non-2xx
+    // GET the key config URL, throw OhttpGatewayException on non-2xx
     // Return KeyConfigFetchResult(bytes: body, maxAge: parsedMaxAge)
   }
 

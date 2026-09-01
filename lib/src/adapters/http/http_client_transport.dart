@@ -11,9 +11,10 @@ import 'package:ohttp_dart/src/ohttp_transport.dart';
 /// An [OhttpTransport] that delegates HTTP calls to an injected [http.Client].
 ///
 /// [fetchKeyConfig] issues a GET to [_keysUrl]; [postToRelay] issues a
-/// POST to [_relayUrl] with Content-Type 'message/ohttp-req'. Any non-2xx
-/// response from either endpoint throws [OhttpRelayException]. The caller
-/// retains ownership of the [http.Client].
+/// POST to [_relayUrl] with Content-Type 'message/ohttp-req'. A non-2xx
+/// response from the key config endpoint throws [OhttpGatewayException];
+/// a non-2xx response from the relay throws [OhttpRelayException]. The
+/// caller retains ownership of the [http.Client].
 class HttpClientTransport implements OhttpTransport {
   static const _ohttpMediaType = 'message/ohttp-req';
   static const _cacheControlHeader = 'cache-control';
@@ -151,7 +152,7 @@ class HttpClientTransport implements OhttpTransport {
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw OhttpRelayException(
+      throw OhttpGatewayException(
         statusCode: response.statusCode,
         message: 'Failed to fetch KeyConfig',
         stackTrace: StackTrace.current,

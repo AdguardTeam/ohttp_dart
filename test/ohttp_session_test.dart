@@ -474,7 +474,7 @@ void main() {
     test('does not retry when keys endpoint returns an error', () async {
       // A failing key-config fetch (keys endpoint down) must NOT be treated
       // as a relay POST error — no retry, no onRelayRetry.
-      transport.fetchError = const OhttpRelayException(statusCode: 503, message: 'keys endpoint down');
+      transport.fetchError = const OhttpGatewayException(statusCode: 503, message: 'keys endpoint down');
       final observer = _RetryObserver();
       final s = OhttpSession(
         transport: transport,
@@ -484,7 +484,7 @@ void main() {
 
       await expectLater(
         s.send(request),
-        throwsA(isA<OhttpRelayException>()),
+        throwsA(isA<OhttpGatewayException>()),
       );
       expect(transport.fetchCount, 1); // exactly one fetch attempt
       expect(transport.postCount, 0); // never reached the relay

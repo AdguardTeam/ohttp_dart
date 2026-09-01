@@ -233,6 +233,7 @@ The library uses a sealed exception hierarchy:
 - `OhttpConfigException` — invalid configuration parameters (wrong URL scheme, invalid timeouts, negative limits)
 - `OhttpKeyConfigException` — malformed KeyConfig binary data
 - `OhttpUnsupportedSuiteException` — unsupported KEM/KDF/AEAD cipher suite
+- `OhttpGatewayException` — gateway returned non-2xx response to a key config request (includes `statusCode`; no cache invalidation, no retry)
 - `OhttpRelayException` — relay returned non-2xx response (triggers cache invalidation, includes `statusCode`)
 - `OhttpCryptoException` — cryptographic operation failure (AEAD auth, HPKE errors; includes optional `cause`)
 - `OhttpDecapsulationException` — OHTTP response decapsulation failure
@@ -340,6 +341,7 @@ The core library defines `OhttpTransport` interface. Implementations:
 
 ### Error Handling
 
+- `OhttpGatewayException` — gateway returned non-2xx for key config fetch
 - `OhttpRelayException` — relay returned error (cache invalidated automatically)
 - `OhttpDecapsulationException` — failed to decrypt response
 - `OhttpFormatException` — malformed BHTTP data (wrong framing, invalid status)

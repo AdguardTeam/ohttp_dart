@@ -189,7 +189,7 @@ void main() {
       expect(result.maxAge, isNull);
     });
 
-    test('fetchKeyConfig throws OhttpRelayException on non-2xx', () async {
+    test('fetchKeyConfig throws OhttpGatewayException on non-2xx', () async {
       final client = _mockClient(keysUrl, statusCode: 500);
       final transport = HttpClientTransport.insecureForTesting(
         client: client,
@@ -199,7 +199,7 @@ void main() {
 
       await expectLater(
         transport.fetchKeyConfig(),
-        throwsA(isA<OhttpRelayException>().having((e) => e.statusCode, 'statusCode', 500)),
+        throwsA(isA<OhttpGatewayException>().having((e) => e.statusCode, 'statusCode', 500)),
       );
     });
 

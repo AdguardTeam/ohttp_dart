@@ -38,6 +38,21 @@ class OhttpKeyConfigException extends OhttpException {
   const OhttpKeyConfigException(super.message, {super.stackTrace});
 }
 
+/// Thrown by [OhttpTransport.fetchKeyConfig] implementations when the
+/// gateway returns a non-2xx response to a key config request.
+class OhttpGatewayException extends OhttpException {
+  final int statusCode;
+
+  const OhttpGatewayException({
+    super.stackTrace,
+    required this.statusCode,
+    required String message,
+  }) : super(message);
+
+  @override
+  String get baseMessage => 'OhttpGatewayException($statusCode): $message';
+}
+
 /// Thrown by [OhttpTransport] implementations when the relay returns
 /// a non-2xx response.
 class OhttpRelayException extends OhttpException {
