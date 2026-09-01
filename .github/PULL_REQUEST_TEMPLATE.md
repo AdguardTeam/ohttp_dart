@@ -1,25 +1,25 @@
-**Краткое описание**
-<!-- Что было сделано? -->
+**Summary**
+<!-- What was done? -->
 
 
-**Детальное описание**
-- _Мажорные изменения_
-  - <!-- Описание крупных фичей / несовместимых изменений -->
+**Detailed description**
+- _Major changes_
+  - <!-- Description of major features / breaking changes -->
 
-- _Минорные изменения_
-  - <!-- Описание небольших фичей / совместимых изменений -->
-
-
-**Комментарии для QA**
-<!-- Особые тест-кейсы, важные моменты... -->
+- _Minor changes_
+  - <!-- Description of small features / backward-compatible changes -->
 
 
-**Платформы для тестирования**
+**Notes for QA**
+<!-- Special test cases, important points... -->
 
-<!-- Если изменения НЕ зависят от платформы — оставьте только эту строку: -->
-- [ ] Любая платформа
 
-<!-- Если изменения затронули конкретные платформы — удалите строку выше и отметьте нужные: -->
+**Platforms to test**
+
+<!-- If the changes are NOT platform-dependent — keep only this line: -->
+- [ ] Any platform
+
+<!-- If the changes affect specific platforms — remove the line above and check the relevant ones: -->
 - [ ] Android
 - [ ] iOS
 - [ ] Windows
