@@ -171,7 +171,7 @@ class OhttpKeyConfig {
 
 /// Result of OHTTP request encapsulation.
 class OhttpEncapsulateResult {
-  /// The complete encapsulated request to POST to the gateway.
+  /// The complete encapsulated request to POST to the relay.
   final Uint8List encRequest;
 
   /// The 32-byte HPKE enc value (needed for response decapsulation).

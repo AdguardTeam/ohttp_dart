@@ -10,10 +10,11 @@ import 'package:ohttp_dart/src/ohttp_transport.dart';
 
 /// An [OhttpTransport] that delegates HTTP calls to an injected [http.Client].
 ///
-/// [fetchKeyConfig] issues a GET to [_keysUrl]; [postToGateway] issues a
-/// POST to [_gatewayUrl] with Content-Type 'message/ohttp-req'. Any non-2xx
-/// response from either endpoint throws [OhttpGatewayException]. The caller
-/// retains ownership of the [http.Client].
+/// [fetchKeyConfig] issues a GET to [_keysUrl]; [postToRelay] issues a
+/// POST to [_relayUrl] with Content-Type 'message/ohttp-req'. A non-2xx
+/// response from the key config endpoint throws [OhttpGatewayException];
+/// a non-2xx response from the relay throws [OhttpRelayException]. The
+/// caller retains ownership of the [http.Client].
 class HttpClientTransport implements OhttpTransport {
   static const _ohttpMediaType = 'message/ohttp-req';
   static const _cacheControlHeader = 'cache-control';
@@ -72,36 +73,36 @@ class HttpClientTransport implements OhttpTransport {
 
   final http.Client _client;
   final Uri _keysUrl;
-  final Uri _gatewayUrl;
+  final Uri _relayUrl;
 
   final Duration _fetchKeyConfigTimeout;
 
-  final Duration _postToGatewayTimeout;
+  final Duration _postToRelayTimeout;
 
   /// Creates an HTTP client transport for OHTTP.
   ///
-  /// Throws [OhttpConfigException] if [keysUrl] or [gatewayUrl] do not use
+  /// Throws [OhttpConfigException] if [keysUrl] or [relayUrl] do not use
   /// the HTTPS scheme.
   ///
-  /// [fetchKeyConfigTimeout] and [postToGatewayTimeout] control the maximum
+  /// [fetchKeyConfigTimeout] and [postToRelayTimeout] control the maximum
   /// time to wait for HTTP responses. Both default to 30 seconds.
   ///
   /// ## Security Warning
   ///
   /// Per [RFC 9458 §1](https://www.rfc-editor.org/rfc/rfc9458#section-1),
-  /// the connection between the client and the relay/gateway MUST be protected
+  /// the connection between the client and the relay MUST be protected
   /// with TLS. Only HTTPS URLs are accepted.
   HttpClientTransport({
     required http.Client client,
     required Uri keysUrl,
-    required Uri gatewayUrl,
+    required Uri relayUrl,
     Duration fetchKeyConfigTimeout = OhttpConstants.defaultFetchKeyConfigTimeout,
-    Duration postToGatewayTimeout = OhttpConstants.defaultPostToGatewayTimeout,
+    Duration postToRelayTimeout = OhttpConstants.defaultPostToRelayTimeout,
   }) : _client = client,
        _keysUrl = _validateHttpsScheme(keysUrl, 'keysUrl'),
-       _gatewayUrl = _validateHttpsScheme(gatewayUrl, 'gatewayUrl'),
+       _relayUrl = _validateHttpsScheme(relayUrl, 'relayUrl'),
        _fetchKeyConfigTimeout = _validateDuration(fetchKeyConfigTimeout, 'fetchKeyConfigTimeout'),
-       _postToGatewayTimeout = _validateDuration(postToGatewayTimeout, 'postToGatewayTimeout');
+       _postToRelayTimeout = _validateDuration(postToRelayTimeout, 'postToRelayTimeout');
 
   /// Creates an HTTP client transport without HTTPS scheme validation.
   ///
@@ -111,14 +112,14 @@ class HttpClientTransport implements OhttpTransport {
   HttpClientTransport.insecureForTesting({
     required http.Client client,
     required Uri keysUrl,
-    required Uri gatewayUrl,
+    required Uri relayUrl,
     Duration fetchKeyConfigTimeout = OhttpConstants.defaultFetchKeyConfigTimeout,
-    Duration postToGatewayTimeout = OhttpConstants.defaultPostToGatewayTimeout,
+    Duration postToRelayTimeout = OhttpConstants.defaultPostToRelayTimeout,
   }) : _client = client,
        _keysUrl = keysUrl,
-       _gatewayUrl = gatewayUrl,
+       _relayUrl = relayUrl,
        _fetchKeyConfigTimeout = _validateDuration(fetchKeyConfigTimeout, 'fetchKeyConfigTimeout'),
-       _postToGatewayTimeout = _validateDuration(postToGatewayTimeout, 'postToGatewayTimeout');
+       _postToRelayTimeout = _validateDuration(postToRelayTimeout, 'postToRelayTimeout');
 
   @override
   Future<KeyConfigFetchResult> fetchKeyConfig() async {
@@ -165,30 +166,30 @@ class HttpClientTransport implements OhttpTransport {
   }
 
   @override
-  Future<Uint8List> postToGateway(Uint8List body) async {
+  Future<Uint8List> postToRelay(Uint8List body) async {
     final http.Response response;
     try {
       response = await _client
           .post(
-            _gatewayUrl,
+            _relayUrl,
             headers: {
               'content-type': _ohttpMediaType,
             },
             body: body,
           )
-          .timeout(_postToGatewayTimeout);
+          .timeout(_postToRelayTimeout);
     } on TimeoutException catch (_, st) {
       throw OhttpTimeoutException(
-        'Post to gateway timeout',
-        timeout: _postToGatewayTimeout,
-        url: _gatewayUrl,
+        'Post to relay timeout',
+        timeout: _postToRelayTimeout,
+        url: _relayUrl,
         stackTrace: st,
       );
     } on http.RequestAbortedException catch (e, st) {
       // Map an intentional cancellation to a distinct type. Must precede
       // `on Exception` — RequestAbortedException is an Exception subtype.
       throw OhttpRequestAbortedException(
-        'Request aborted while posting to Gateway',
+        'Request aborted while posting to relay',
         cause: e,
         stackTrace: st,
       );
@@ -196,16 +197,16 @@ class HttpClientTransport implements OhttpTransport {
       rethrow;
     } on Exception catch (e, st) {
       throw OhttpNetworkException(
-        'Network error while posting to Gateway',
+        'Network error while posting to relay',
         cause: e,
         stackTrace: st,
       );
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw OhttpGatewayException(
+      throw OhttpRelayException(
         statusCode: response.statusCode,
-        message: 'Failed to POST to Gateway',
+        message: 'Failed to POST to relay',
         stackTrace: StackTrace.current,
       );
     }

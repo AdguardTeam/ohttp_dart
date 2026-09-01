@@ -23,7 +23,7 @@ optional adapter for `package:http`.
 | **Target Platforms** | iOS, macOS, Android, Windows                                                   |
 | **Formatter**        | `line-length: 120`, `require_trailing_commas` enabled                          |
 | **Strict analysis**  | `strict-casts: true`, `strict-raw-types: true`                                 |
-| **Version**          | 0.4.0                                                                          |
+| **Version**          | 0.6.0                                                                          |
 | **Publish**          | Not published (`publish_to: none`)                                             |
 
 ## Project Structure
@@ -64,7 +64,7 @@ ohttp_dart/
 │   │   └── http_adapter_test.dart
 │   ├── integration/                       # End-to-end pipeline + fuzz tests
 │   │   ├── fuzz_test.dart                  # kiri_check property / fuzz tests
-│   │   ├── ohttp_pipeline_test.dart        # Full encapsulate → gateway → decapsulate round trip
+│   │   ├── ohttp_pipeline_test.dart        # Full encapsulate → relay → decapsulate round trip
 │   │   └── pipeline_test_utils.dart        # Shared integration helpers
 │   └── stubs/
 │       └── gateway_stub.dart               # In-memory gateway stub
@@ -72,7 +72,7 @@ ohttp_dart/
 │   ├── lib/
 │   │   ├── main.dart                     # Two-path demo UI + state (OHTTP + direct)
 │   │   └── src/
-│   │       ├── gateways.dart             # HttpClientTransport gateway presets
+│   │       ├── relays.dart               # HttpClientTransport relay presets
 │   │       ├── log_entry.dart            # Log entry model (level, source, message)
 │   │       ├── log_observer.dart         # OhttpObserver -> on-screen log
 │   │       ├── log_panel.dart            # Color-coded, auto-scrolling log list
@@ -90,7 +90,7 @@ ohttp_dart/
 
 ### Core Concepts
 
-- **OHTTP (RFC 9458)**: Oblivious HTTP protocol for privacy-preserving requests via gateway
+- **OHTTP (RFC 9458)**: Oblivious HTTP protocol for privacy-preserving requests via a relay to a gateway
 - **HPKE (RFC 9180)**: Hybrid Public Key Encryption used for request encryption
 - **BHTTP (RFC 9292)**: Binary HTTP format for serializing HTTP messages
 - **Cipher Suite**: DHKEM(X25519, HKDF-SHA256) + HKDF-SHA256 + AES-128-GCM
@@ -233,7 +233,8 @@ The library uses a sealed exception hierarchy:
 - `OhttpConfigException` — invalid configuration parameters (wrong URL scheme, invalid timeouts, negative limits)
 - `OhttpKeyConfigException` — malformed KeyConfig binary data
 - `OhttpUnsupportedSuiteException` — unsupported KEM/KDF/AEAD cipher suite
-- `OhttpGatewayException` — gateway returned non-2xx response (triggers cache invalidation, includes `statusCode`)
+- `OhttpGatewayException` — gateway returned non-2xx response to a key config request (includes `statusCode`; no cache invalidation, no retry)
+- `OhttpRelayException` — relay returned non-2xx response (triggers cache invalidation, includes `statusCode`)
 - `OhttpCryptoException` — cryptographic operation failure (AEAD auth, HPKE errors; includes optional `cause`)
 - `OhttpDecapsulationException` — OHTTP response decapsulation failure
 - `OhttpFormatException` — malformed BHTTP data (wrong framing, invalid status code)
@@ -312,7 +313,7 @@ The core library defines `OhttpTransport` interface. Implementations:
 
 - `KeyConfigCache` provides TTL-based caching with single-flight requests
 - Default TTL: 1 hour
-- Cache invalidation occurs on `OhttpGatewayException` (4xx/5xx responses)
+- Cache invalidation occurs on `OhttpRelayException` (4xx/5xx responses)
 
 ### Session Management
 
@@ -320,14 +321,14 @@ The core library defines `OhttpTransport` interface. Implementations:
 - Each session owns its transport and cache instances
 - Sessions are NOT thread-safe by default (use external synchronization if needed)
 - Sessions accept an optional `OhttpObserver` for lifecycle event notifications
-- When `retryOnGatewayError` is `true` (the default), a single automatic retry is performed
-  after an `OhttpGatewayException`: the cache is invalidated, a fresh config is fetched,
+- When `retryOnRelayError` is `true` (the default), a single automatic retry is performed
+  after an `OhttpRelayException`: the cache is invalidated, a fresh config is fetched,
   and the request is re-sent once
 
 ### Observer Pattern
 
 - `OhttpObserver` provides lifecycle event hooks (abstract class with no-op default methods)
-- Events: `onKeyConfigFetched`, `onKeyConfigCacheHit`, `onPostToGateway`, `onDecapsulationError`, `onGatewayError`, `onCacheInvalidated`, `onEncapsulationError`, `onGatewayRetry`, `onRoundTripCompleted`
+- Events: `onKeyConfigFetched`, `onKeyConfigCacheHit`, `onPostToRelay`, `onDecapsulationError`, `onRelayError`, `onCacheInvalidated`, `onEncapsulationError`, `onRelayRetry`, `onRoundTripCompleted`
 - Observer errors are suppressed via `notifySafe()` — they must not affect the OHTTP pipeline
 - Observer is optional and nullable throughout the API
 - **Security**: observer callbacks must never receive or log cryptographic material (keys, nonces, shared secrets), raw inner request/response bodies, or plaintext headers — only lifecycle signals (success/failure events) and safe metadata (status codes, error types) are permitted
@@ -340,7 +341,8 @@ The core library defines `OhttpTransport` interface. Implementations:
 
 ### Error Handling
 
-- `OhttpGatewayException` — gateway returned error (cache invalidated automatically)
+- `OhttpGatewayException` — gateway returned non-2xx for key config fetch
+- `OhttpRelayException` — relay returned error (cache invalidated automatically)
 - `OhttpDecapsulationException` — failed to decrypt response
 - `OhttpFormatException` — malformed BHTTP data (wrong framing, invalid status)
 - `OhttpCryptoException` — AES-GCM / HPKE crypto failure

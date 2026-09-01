@@ -9,7 +9,7 @@ import 'test_utils.dart';
 class _RecordingObserver extends OhttpObserver {
   final List<String> events = [];
   Type? lastDecapsulationError;
-  int? lastGatewayError;
+  int? lastRelayError;
   Type? lastEncapsulationError;
   Duration? lastRoundTripElapsed;
   OhttpRequestStage? lastAbortStage;
@@ -21,7 +21,7 @@ class _RecordingObserver extends OhttpObserver {
   void onKeyConfigCacheHit() => events.add('cacheHit');
 
   @override
-  void onPostToGateway() => events.add('postToGateway');
+  void onPostToRelay() => events.add('postToRelay');
 
   @override
   void onDecapsulationError(Type errorType) {
@@ -30,9 +30,9 @@ class _RecordingObserver extends OhttpObserver {
   }
 
   @override
-  void onGatewayError(int statusCode) {
-    events.add('gatewayError');
-    lastGatewayError = statusCode;
+  void onRelayError(int statusCode) {
+    events.add('relayError');
+    lastRelayError = statusCode;
   }
 
   @override
@@ -45,7 +45,7 @@ class _RecordingObserver extends OhttpObserver {
   void onCacheInvalidated() => events.add('cacheInvalidated');
 
   @override
-  void onGatewayRetry() => events.add('gatewayRetry');
+  void onRelayRetry() => events.add('relayRetry');
 
   @override
   void onRoundTripCompleted(Duration elapsed) {
@@ -69,13 +69,13 @@ class _ThrowingObserver extends OhttpObserver {
   void onKeyConfigCacheHit() => throw Exception('fail');
 
   @override
-  void onPostToGateway() => throw Exception('fail');
+  void onPostToRelay() => throw Exception('fail');
 
   @override
   void onDecapsulationError(Type errorType) => throw Exception('fail');
 
   @override
-  void onGatewayError(int statusCode) => throw Exception('fail');
+  void onRelayError(int statusCode) => throw Exception('fail');
 
   @override
   void onCacheInvalidated() => throw Exception('fail');
@@ -84,7 +84,7 @@ class _ThrowingObserver extends OhttpObserver {
   void onEncapsulationError(Type errorType) => throw Exception('fail');
 
   @override
-  void onGatewayRetry() => throw Exception('fail');
+  void onRelayRetry() => throw Exception('fail');
 
   @override
   void onRoundTripCompleted(Duration elapsed) => throw Exception('fail');
@@ -131,7 +131,7 @@ class _FakeTransport implements OhttpTransport {
   }
 
   @override
-  Future<Uint8List> postToGateway(Uint8List body) async {
+  Future<Uint8List> postToRelay(Uint8List body) async {
     if (postError != null) {
       throw postError!;
     }
@@ -170,9 +170,9 @@ void main() {
       expect(observer.events, contains('cacheHit'));
     });
 
-    test('onPostToGateway before POST', () async {
+    test('onPostToRelay before POST', () async {
       await expectLater(makeSession().send(request), throwsA(anything));
-      expect(observer.events, contains('postToGateway'));
+      expect(observer.events, contains('postToRelay'));
     });
 
     test('onDecapsulationError on decryption failure', () async {
@@ -181,16 +181,16 @@ void main() {
       expect(observer.lastDecapsulationError, isNotNull);
     });
 
-    test('onGatewayError on OhttpGatewayException', () async {
+    test('onRelayError on OhttpRelayException', () async {
       final s = makeSession();
       await expectLater(s.send(request), throwsA(anything)); // seed cache
       observer.events.clear();
-      transport.postError = const OhttpGatewayException(statusCode: 502, message: 'bad gateway');
+      transport.postError = const OhttpRelayException(statusCode: 502, message: 'bad relay');
 
-      await expectLater(s.send(request), throwsA(isA<OhttpGatewayException>()));
-      expect(observer.events, contains('gatewayError'));
+      await expectLater(s.send(request), throwsA(isA<OhttpRelayException>()));
+      expect(observer.events, contains('relayError'));
       expect(observer.events, contains('cacheInvalidated'));
-      expect(observer.lastGatewayError, 502);
+      expect(observer.lastRelayError, 502);
     });
 
     test('throwing observer does not break pipeline', () async {
@@ -217,25 +217,25 @@ void main() {
       expect(observer.lastEncapsulationError, OhttpUnsupportedSuiteException);
     });
 
-    test('onGatewayRetry is called on retry', () async {
+    test('onRelayRetry is called on retry', () async {
       final s = makeSession();
-      transport.postError = const OhttpGatewayException(statusCode: 502, message: 'bad gateway');
+      transport.postError = const OhttpRelayException(statusCode: 502, message: 'bad relay');
 
-      await expectLater(s.send(request), throwsA(isA<OhttpGatewayException>()));
-      expect(observer.events, contains('gatewayRetry'));
+      await expectLater(s.send(request), throwsA(isA<OhttpRelayException>()));
+      expect(observer.events, contains('relayRetry'));
     });
 
-    test('onGatewayRetry is not called when retryOnGatewayError is false', () async {
+    test('onRelayRetry is not called when retryOnRelayError is false', () async {
       final s = OhttpSession(
         transport: transport,
         cache: KeyConfigCache(transport: transport, observer: observer),
         observer: observer,
-        retryOnGatewayError: false,
+        retryOnRelayError: false,
       );
-      transport.postError = const OhttpGatewayException(statusCode: 502, message: 'bad gateway');
+      transport.postError = const OhttpRelayException(statusCode: 502, message: 'bad relay');
 
-      await expectLater(s.send(request), throwsA(isA<OhttpGatewayException>()));
-      expect(observer.events, isNot(contains('gatewayRetry')));
+      await expectLater(s.send(request), throwsA(isA<OhttpRelayException>()));
+      expect(observer.events, isNot(contains('relayRetry')));
     });
 
     test('onRoundTripCompleted is not called when send fails', () async {
@@ -251,11 +251,11 @@ void main() {
       await expectLater(makeSession().send(request), throwsA(isA<OhttpRequestAbortedException>()));
       expect(observer.events, contains('requestAborted'));
       expect(observer.lastAbortStage, OhttpRequestStage.keyConfigFetch);
-      expect(observer.events, isNot(contains('gatewayRetry')));
+      expect(observer.events, isNot(contains('relayRetry')));
       expect(observer.events, isNot(contains('cacheInvalidated')));
     });
 
-    test('onRequestAborted with gatewayPost stage on aborted gateway post', () async {
+    test('onRequestAborted with relayPost stage on aborted relay post', () async {
       final s = makeSession();
       await expectLater(s.send(request), throwsA(anything)); // seed cache
       observer.events.clear();
@@ -263,10 +263,10 @@ void main() {
 
       await expectLater(s.send(request), throwsA(isA<OhttpRequestAbortedException>()));
       expect(observer.events, contains('requestAborted'));
-      expect(observer.lastAbortStage, OhttpRequestStage.gatewayPost);
-      expect(observer.events, isNot(contains('gatewayError')));
+      expect(observer.lastAbortStage, OhttpRequestStage.relayPost);
+      expect(observer.events, isNot(contains('relayError')));
       expect(observer.events, isNot(contains('cacheInvalidated')));
-      expect(observer.events, isNot(contains('gatewayRetry')));
+      expect(observer.events, isNot(contains('relayRetry')));
       expect(observer.events, isNot(contains('roundTripCompleted')));
     });
 

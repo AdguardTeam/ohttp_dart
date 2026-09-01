@@ -1,5 +1,5 @@
 /// Default echo path for each HTTP method supported by the httpbin-style
-/// gateway target (verified live against httpbin.agrd.workers.dev).
+/// target resource (verified live against httpbin.agrd.workers.dev).
 const methodDefaultPaths = <String, String>{
   'GET': '/get',
   'POST': '/post',

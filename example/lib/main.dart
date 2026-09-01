@@ -10,7 +10,7 @@ import 'package:ohttp_dart/http.dart';
 import 'package:ohttp_dart/ohttp_dart.dart';
 
 import 'src/compare_view.dart';
-import 'src/gateways.dart';
+import 'src/relays.dart';
 import 'src/log_entry.dart';
 import 'src/log_observer.dart';
 import 'src/log_panel.dart';
@@ -60,8 +60,8 @@ class _OhttpDemoPageState extends State<OhttpDemoPage>
   /// starts scrolling vertically instead of squeezing it further.
   static const _minTabSectionHeight = 320.0;
 
-  // Gateway presets
-  static final _gateways =
+  // Relay presets
+  static final _relays =
       <
         String,
         ({
@@ -88,7 +88,7 @@ class _OhttpDemoPageState extends State<OhttpDemoPage>
   late KeyConfigCache _cache;
   late OhttpSession _session;
   String _authority = httpbinAuthority;
-  String _selectedGateway = 'httpbin';
+  String _selectedRelay = 'httpbin';
   bool _proxyEnabled = false;
   int _proxyPort = 9090;
 
@@ -100,20 +100,20 @@ class _OhttpDemoPageState extends State<OhttpDemoPage>
   }
 
   void _initSession(String name) {
-    final useLocal = localGatewayEnabled && _proxyEnabled;
+    final useLocal = localRelayEnabled && _proxyEnabled;
     final http.Client proxied = _proxyEnabled
         ? _createProxiedClient('localhost:$_proxyPort')
         : http.Client();
 
-    _rawClient = useLocal ? _createLocalGatewayClient() : proxied;
+    _rawClient = useLocal ? _createLocalRelayClient() : proxied;
     _directClient = proxied;
-    final entry = _gateways[name]!;
+    final entry = _relays[name]!;
     _authority = entry.authority;
     final observer = LogObserver(
       (level, message) => _addEntry(level, 'OHTTP', message),
     );
     final transport = useLocal
-        ? localGatewayTransport(_rawClient)
+        ? localRelayTransport(_rawClient)
         : entry.transport(_rawClient);
     _cache = KeyConfigCache(transport: transport, observer: observer);
     _session = OhttpSession(
@@ -124,7 +124,7 @@ class _OhttpDemoPageState extends State<OhttpDemoPage>
   }
 
   // Accepts the self-signed cert generated at runtime by the local Go gateway.
-  http.Client _createLocalGatewayClient() {
+  http.Client _createLocalRelayClient() {
     final ioClient = HttpClient()
       ..badCertificateCallback = (cert, host, port) => true;
     return IOClient(ioClient);
@@ -154,13 +154,13 @@ class _OhttpDemoPageState extends State<OhttpDemoPage>
     }
   }
 
-  void _onGatewayChanged(String? name) {
+  void _onRelayChanged(String? name) {
     if (name == null) {
       return;
     }
     _closeClients();
     setState(() {
-      _selectedGateway = name;
+      _selectedRelay = name;
       _initSession(name);
       _ohttpResponse = null;
       _directResponse = null;
@@ -190,7 +190,7 @@ class _OhttpDemoPageState extends State<OhttpDemoPage>
     _closeClients();
     setState(() {
       _proxyEnabled = value;
-      _initSession(_selectedGateway);
+      _initSession(_selectedRelay);
     });
     _addEntry(
       LogLevel.info,
@@ -395,17 +395,17 @@ class _OhttpDemoPageState extends State<OhttpDemoPage>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Gateway selector + key-rotation demo action
+                    // Relay selector + gateway key-rotation demo action
                     Row(
                       children: [
                         const Text(
-                          'Gateway: ',
+                          'Relay: ',
                           style: TextStyle(fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(width: 8),
                         DropdownButton<String>(
-                          value: _selectedGateway,
-                          items: _gateways.keys
+                          value: _selectedRelay,
+                          items: _relays.keys
                               .map(
                                 (name) => DropdownMenuItem(
                                   value: name,
@@ -413,7 +413,7 @@ class _OhttpDemoPageState extends State<OhttpDemoPage>
                                 ),
                               )
                               .toList(),
-                          onChanged: _loading ? null : _onGatewayChanged,
+                          onChanged: _loading ? null : _onRelayChanged,
                         ),
                         const Spacer(),
                         Text(_proxyEnabled ? 'Proxy: $_proxyPort' : 'Proxy'),

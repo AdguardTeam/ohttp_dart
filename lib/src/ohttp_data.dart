@@ -18,7 +18,7 @@ class OhttpRequestData {
   /// URI scheme (e.g. `http`, `https`).
   final String scheme;
 
-  /// Inner target host the gateway forwards to, not the gateway URL.
+  /// Inner target host the relay forwards to, not the relay URL.
   ///
   /// The authority MUST be a host or host:port pair without scheme, path,
   /// query, fragment, or spaces. Per [RFC 3986 §3.2](https://www.rfc-editor.org/rfc/rfc3986#section-3.2),

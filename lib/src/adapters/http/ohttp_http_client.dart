@@ -9,7 +9,7 @@ import 'package:ohttp_dart/src/ohttp_session.dart';
 
 import 'http_client_transport.dart';
 
-/// An [Client] that tunnels requests through an OHTTP gateway.
+/// An [Client] that tunnels requests through an OHTTP relay.
 ///
 /// Translates each [BaseRequest] into an [OhttpRequestData] and passes it
 /// to [OhttpSession.send]. The response is converted back to a
@@ -46,21 +46,21 @@ class OhttpHttpClient extends BaseClient {
   factory OhttpHttpClient.create({
     required Client client,
     required Uri keysUrl,
-    required Uri gatewayUrl,
+    required Uri relayUrl,
     OhttpObserver? observer,
     Duration? keyConfigCacheTtl,
     Duration fetchKeyConfigTimeout = OhttpConstants.defaultFetchKeyConfigTimeout,
-    Duration postToGatewayTimeout = OhttpConstants.defaultPostToGatewayTimeout,
-    bool retryOnGatewayError = true,
+    Duration postToRelayTimeout = OhttpConstants.defaultPostToRelayTimeout,
+    bool retryOnRelayError = true,
     int maxEncryptedResponseBytes = OhttpConstants.defaultMaxEncryptedResponseBytes,
     BhttpResponseLimits decryptedResponseLimits = const BhttpResponseLimits(),
   }) {
     final transport = HttpClientTransport(
       client: client,
       keysUrl: keysUrl,
-      gatewayUrl: gatewayUrl,
+      relayUrl: relayUrl,
       fetchKeyConfigTimeout: fetchKeyConfigTimeout,
-      postToGatewayTimeout: postToGatewayTimeout,
+      postToRelayTimeout: postToRelayTimeout,
     );
     final cache = KeyConfigCache(
       transport: transport,
@@ -71,7 +71,7 @@ class OhttpHttpClient extends BaseClient {
       transport: transport,
       cache: cache,
       observer: observer,
-      retryOnGatewayError: retryOnGatewayError,
+      retryOnRelayError: retryOnRelayError,
       maxEncryptedResponseBytes: maxEncryptedResponseBytes,
       decryptedResponseLimits: decryptedResponseLimits,
     );

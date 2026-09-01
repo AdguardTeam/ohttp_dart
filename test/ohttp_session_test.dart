@@ -20,7 +20,7 @@ class _FakeTransport implements OhttpTransport {
   /// When set, [fetchKeyConfig] throws this instead of succeeding.
   Object? fetchError;
 
-  /// When set, [postToGateway] throws this instead of succeeding.
+  /// When set, [postToRelay] throws this instead of succeeding.
   Object? postError;
 
   @override
@@ -34,7 +34,7 @@ class _FakeTransport implements OhttpTransport {
   }
 
   @override
-  Future<Uint8List> postToGateway(Uint8List body) async {
+  Future<Uint8List> postToRelay(Uint8List body) async {
     postCount++;
     lastPostBody = body;
     if (postError != null) {
@@ -46,12 +46,12 @@ class _FakeTransport implements OhttpTransport {
   }
 }
 
-/// Observer that records whether [onGatewayRetry] was called.
+/// Observer that records whether [onRelayRetry] was called.
 class _RetryObserver extends OhttpObserver {
   int retryCount = 0;
 
   @override
-  void onGatewayRetry() => retryCount++;
+  void onRelayRetry() => retryCount++;
 }
 
 void main() {
@@ -85,24 +85,24 @@ void main() {
       expect(transport.fetchCount, 1);
     });
 
-    test('invalidates cache on OhttpGatewayException', () async {
+    test('invalidates cache on OhttpRelayException', () async {
       // Use a no-retry session so cache invalidation mechanics can be tested
       // in isolation without the automatic retry fetching a new key config.
       final noRetrySession = OhttpSession(
         transport: transport,
         cache: KeyConfigCache(transport: transport),
-        retryOnGatewayError: false,
+        retryOnRelayError: false,
       );
 
       // Seed the cache.
       await expectLater(noRetrySession.send(request), throwsA(anything));
       expect(transport.fetchCount, 1);
 
-      // Make postToGateway fail with a gateway error.
-      transport.postError = const OhttpGatewayException(statusCode: 502, message: 'bad gateway');
+      // Make postToRelay fail with a relay error.
+      transport.postError = const OhttpRelayException(statusCode: 502, message: 'bad relay');
 
-      await expectLater(noRetrySession.send(request), throwsA(isA<OhttpGatewayException>()));
-      // The gateway error invalidated the cache; the next send must re-fetch.
+      await expectLater(noRetrySession.send(request), throwsA(isA<OhttpRelayException>()));
+      // The relay error invalidated the cache; the next send must re-fetch.
       expect(transport.fetchCount, 1); // invalidation does not itself fetch
 
       transport.postError = null;
@@ -110,12 +110,12 @@ void main() {
       expect(transport.fetchCount, 2); // re-fetch after invalidation
     });
 
-    test('does not invalidate cache on non-gateway error', () async {
+    test('does not invalidate cache on non-relay error', () async {
       await expectLater(session.send(request), throwsA(anything));
       expect(transport.fetchCount, 1);
 
       transport.postError = OhttpNetworkException(
-        'Network error while posting to Gateway',
+        'Network error while posting to relay',
         cause: Exception('connection refused'),
       );
 
@@ -418,7 +418,7 @@ void main() {
     });
   });
 
-  group('Retry on gateway error', () {
+  group('Retry on relay error', () {
     late _FakeTransport transport;
 
     final request = OhttpRequestData(
@@ -433,32 +433,32 @@ void main() {
     OhttpSession makeSession({bool retry = true}) => OhttpSession(
       transport: transport,
       cache: KeyConfigCache(transport: transport),
-      retryOnGatewayError: retry,
+      retryOnRelayError: retry,
     );
 
-    test('retries once on OhttpGatewayException', () async {
-      transport.postError = const OhttpGatewayException(statusCode: 502, message: 'bad gateway');
+    test('retries once on OhttpRelayException', () async {
+      transport.postError = const OhttpRelayException(statusCode: 502, message: 'bad relay');
 
       await expectLater(
         makeSession().send(request),
-        throwsA(isA<OhttpGatewayException>()),
+        throwsA(isA<OhttpRelayException>()),
       );
       expect(transport.postCount, 2); // tried twice
       expect(transport.fetchCount, 2); // fetched fresh key for retry
     });
 
-    test('does not retry when retryOnGatewayError is false', () async {
-      transport.postError = const OhttpGatewayException(statusCode: 502, message: 'bad gateway');
+    test('does not retry when retryOnRelayError is false', () async {
+      transport.postError = const OhttpRelayException(statusCode: 502, message: 'bad relay');
 
       await expectLater(
         makeSession(retry: false).send(request),
-        throwsA(isA<OhttpGatewayException>()),
+        throwsA(isA<OhttpRelayException>()),
       );
       expect(transport.postCount, 1);
       expect(transport.fetchCount, 1);
     });
 
-    test('does not retry on non-gateway errors', () async {
+    test('does not retry on non-relay errors', () async {
       transport.postError = OhttpNetworkException(
         'network error',
         cause: Exception('connection refused'),
@@ -468,12 +468,12 @@ void main() {
         makeSession().send(request),
         throwsA(isA<OhttpNetworkException>()),
       );
-      expect(transport.postCount, 1); // no retry for non-gateway errors
+      expect(transport.postCount, 1); // no retry for non-relay errors
     });
 
     test('does not retry when keys endpoint returns an error', () async {
       // A failing key-config fetch (keys endpoint down) must NOT be treated
-      // as a gateway POST error — no retry, no onGatewayRetry.
+      // as a relay POST error — no retry, no onRelayRetry.
       transport.fetchError = const OhttpGatewayException(statusCode: 503, message: 'keys endpoint down');
       final observer = _RetryObserver();
       final s = OhttpSession(
@@ -487,7 +487,7 @@ void main() {
         throwsA(isA<OhttpGatewayException>()),
       );
       expect(transport.fetchCount, 1); // exactly one fetch attempt
-      expect(transport.postCount, 0); // never reached the gateway
+      expect(transport.postCount, 0); // never reached the relay
       expect(observer.retryCount, 0); // no retry fired
     });
   });

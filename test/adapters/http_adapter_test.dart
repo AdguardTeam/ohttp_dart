@@ -49,7 +49,7 @@ class _FakeSession implements OhttpSession {
 
 void main() {
   const httpsKeysUrl = 'https://gateway.example.com/ohttp/config';
-  const httpsGatewayUrl = 'https://gateway.example.com/ohttp/gateway';
+  const httpsRelayUrl = 'https://relay.example.com/ohttp/relay';
 
   group('HttpClientTransport URL validation', () {
     test('accepts https scheme for both URLs', () {
@@ -59,7 +59,7 @@ void main() {
         () => HttpClientTransport(
           client: client,
           keysUrl: Uri.parse(httpsKeysUrl),
-          gatewayUrl: Uri.parse(httpsGatewayUrl),
+          relayUrl: Uri.parse(httpsRelayUrl),
         ),
         returnsNormally,
       );
@@ -72,20 +72,20 @@ void main() {
         () => HttpClientTransport(
           client: client,
           keysUrl: Uri.parse('http://gateway.example.com/ohttp/config'),
-          gatewayUrl: Uri.parse(httpsGatewayUrl),
+          relayUrl: Uri.parse(httpsRelayUrl),
         ),
         throwsA(isA<OhttpConfigException>()),
       );
     });
 
-    test('rejects http scheme for gatewayUrl', () {
+    test('rejects http scheme for relayUrl', () {
       final client = MockClient((request) async => Response.bytes(Uint8List(0), 200));
 
       expect(
         () => HttpClientTransport(
           client: client,
           keysUrl: Uri.parse(httpsKeysUrl),
-          gatewayUrl: Uri.parse('http://gateway.example.com/ohttp/gateway'),
+          relayUrl: Uri.parse('http://relay.example.com/ohttp/relay'),
         ),
         throwsA(isA<OhttpConfigException>()),
       );
@@ -98,7 +98,7 @@ void main() {
         () => HttpClientTransport(
           client: client,
           keysUrl: Uri.parse('ftp://gateway.example.com/ohttp/config'),
-          gatewayUrl: Uri.parse(httpsGatewayUrl),
+          relayUrl: Uri.parse(httpsRelayUrl),
         ),
         throwsA(isA<OhttpConfigException>()),
       );
@@ -111,7 +111,7 @@ void main() {
         () => HttpClientTransport(
           client: client,
           keysUrl: Uri.parse('gateway.example.com/ohttp/config'),
-          gatewayUrl: Uri.parse(httpsGatewayUrl),
+          relayUrl: Uri.parse(httpsRelayUrl),
         ),
         throwsA(isA<OhttpConfigException>()),
       );
@@ -124,7 +124,7 @@ void main() {
         () => HttpClientTransport.insecureForTesting(
           client: client,
           keysUrl: Uri.parse('http://localhost/ohttp/config'),
-          gatewayUrl: Uri.parse('http://localhost/ohttp/gateway'),
+          relayUrl: Uri.parse('http://localhost/ohttp/relay'),
         ),
         returnsNormally,
       );
@@ -134,7 +134,7 @@ void main() {
   group('HttpClientTransport timeout validation', () {
     final client = MockClient((request) async => Response.bytes(Uint8List(0), 200));
     final keysUrl = Uri.parse(httpsKeysUrl);
-    final gatewayUrl = Uri.parse(httpsGatewayUrl);
+    final relayUrl = Uri.parse(httpsRelayUrl);
 
     test('rejects negative or zero Duration for either timeout', () {
       for (final invalid in [Duration.zero, const Duration(seconds: -1)]) {
@@ -142,7 +142,7 @@ void main() {
           () => HttpClientTransport(
             client: client,
             keysUrl: keysUrl,
-            gatewayUrl: gatewayUrl,
+            relayUrl: relayUrl,
             fetchKeyConfigTimeout: invalid,
           ),
           throwsA(isA<OhttpConfigException>()),
@@ -152,17 +152,17 @@ void main() {
           () => HttpClientTransport(
             client: client,
             keysUrl: keysUrl,
-            gatewayUrl: gatewayUrl,
-            postToGatewayTimeout: invalid,
+            relayUrl: relayUrl,
+            postToRelayTimeout: invalid,
           ),
           throwsA(isA<OhttpConfigException>()),
-          reason: 'postToGatewayTimeout = $invalid',
+          reason: 'postToRelayTimeout = $invalid',
         );
         expect(
           () => HttpClientTransport.insecureForTesting(
             client: client,
             keysUrl: Uri.parse('http://localhost/ohttp/config'),
-            gatewayUrl: Uri.parse('http://localhost/ohttp/gateway'),
+            relayUrl: Uri.parse('http://localhost/ohttp/relay'),
             fetchKeyConfigTimeout: invalid,
           ),
           throwsA(isA<OhttpConfigException>()),
@@ -174,14 +174,14 @@ void main() {
 
   group('HttpClientTransport', () {
     const keysUrl = 'http://localhost/ohttp/config';
-    const gatewayUrl = 'http://localhost/ohttp/gateway';
+    const relayUrl = 'http://localhost/ohttp/relay';
 
     test('fetchKeyConfig returns bytes on 200', () async {
       final client = _mockClient(keysUrl, body: validKeyConfig());
       final transport = HttpClientTransport.insecureForTesting(
         client: client,
         keysUrl: Uri.parse(keysUrl),
-        gatewayUrl: Uri.parse(gatewayUrl),
+        relayUrl: Uri.parse(relayUrl),
       );
 
       final result = await transport.fetchKeyConfig();
@@ -194,7 +194,7 @@ void main() {
       final transport = HttpClientTransport.insecureForTesting(
         client: client,
         keysUrl: Uri.parse(keysUrl),
-        gatewayUrl: Uri.parse(gatewayUrl),
+        relayUrl: Uri.parse(relayUrl),
       );
 
       await expectLater(
@@ -203,7 +203,7 @@ void main() {
       );
     });
 
-    test('postToGateway sends Content-Type message/ohttp-req', () async {
+    test('postToRelay sends Content-Type message/ohttp-req', () async {
       final body = Uint8List.fromList([1, 2, 3]);
       final client = MockClient((request) async {
         expect(request.headers['content-type'], 'message/ohttp-req');
@@ -215,23 +215,23 @@ void main() {
       final transport = HttpClientTransport.insecureForTesting(
         client: client,
         keysUrl: Uri.parse(keysUrl),
-        gatewayUrl: Uri.parse(gatewayUrl),
+        relayUrl: Uri.parse(relayUrl),
       );
 
-      await transport.postToGateway(body);
+      await transport.postToRelay(body);
     });
 
-    test('postToGateway throws OhttpGatewayException on non-2xx', () async {
-      final client = _mockClient(gatewayUrl, statusCode: 502);
+    test('postToRelay throws OhttpRelayException on non-2xx', () async {
+      final client = _mockClient(relayUrl, statusCode: 502);
       final transport = HttpClientTransport.insecureForTesting(
         client: client,
         keysUrl: Uri.parse(keysUrl),
-        gatewayUrl: Uri.parse(gatewayUrl),
+        relayUrl: Uri.parse(relayUrl),
       );
 
       await expectLater(
-        transport.postToGateway(Uint8List(0)),
-        throwsA(isA<OhttpGatewayException>().having((e) => e.statusCode, 'statusCode', 502)),
+        transport.postToRelay(Uint8List(0)),
+        throwsA(isA<OhttpRelayException>().having((e) => e.statusCode, 'statusCode', 502)),
       );
     });
 
@@ -242,7 +242,7 @@ void main() {
       final transport = HttpClientTransport.insecureForTesting(
         client: client,
         keysUrl: Uri.parse(keysUrl),
-        gatewayUrl: Uri.parse(gatewayUrl),
+        relayUrl: Uri.parse(relayUrl),
       );
 
       await expectLater(
@@ -260,7 +260,7 @@ void main() {
       final transport = HttpClientTransport.insecureForTesting(
         client: client,
         keysUrl: Uri.parse(keysUrl),
-        gatewayUrl: Uri.parse(gatewayUrl),
+        relayUrl: Uri.parse(relayUrl),
       );
 
       await expectLater(
@@ -271,36 +271,36 @@ void main() {
       );
     });
 
-    test('postToGateway throws OhttpRequestAbortedException on client-side cancellation', () async {
+    test('postToRelay throws OhttpRequestAbortedException on client-side cancellation', () async {
       final client = MockClient((request) async {
         throw RequestAbortedException();
       });
       final transport = HttpClientTransport.insecureForTesting(
         client: client,
         keysUrl: Uri.parse(keysUrl),
-        gatewayUrl: Uri.parse(gatewayUrl),
+        relayUrl: Uri.parse(relayUrl),
       );
 
       await expectLater(
-        transport.postToGateway(Uint8List(0)),
+        transport.postToRelay(Uint8List(0)),
         throwsA(
           isA<OhttpRequestAbortedException>().having((e) => e.cause, 'cause', isA<RequestAbortedException>()),
         ),
       );
     });
 
-    test('wraps network errors in OhttpNetworkException during postToGateway', () async {
+    test('wraps network errors in OhttpNetworkException during postToRelay', () async {
       final client = MockClient((request) async {
         throw ClientException('connection refused');
       });
       final transport = HttpClientTransport.insecureForTesting(
         client: client,
         keysUrl: Uri.parse(keysUrl),
-        gatewayUrl: Uri.parse(gatewayUrl),
+        relayUrl: Uri.parse(relayUrl),
       );
 
       await expectLater(
-        transport.postToGateway(Uint8List(0)),
+        transport.postToRelay(Uint8List(0)),
         throwsA(
           isA<OhttpNetworkException>().having((e) => e.cause, 'cause', isA<ClientException>()),
         ),
@@ -316,7 +316,7 @@ void main() {
       final transport = HttpClientTransport.insecureForTesting(
         client: client,
         keysUrl: Uri.parse(keysUrl),
-        gatewayUrl: Uri.parse(gatewayUrl),
+        relayUrl: Uri.parse(relayUrl),
         fetchKeyConfigTimeout: const Duration(milliseconds: 100),
       );
 
@@ -331,7 +331,7 @@ void main() {
       );
     });
 
-    test('postToGateway throws OhttpTimeoutException on timeout', () async {
+    test('postToRelay throws OhttpTimeoutException on timeout', () async {
       final client = MockClient((request) async {
         await Future<void>.delayed(const Duration(seconds: 2));
 
@@ -340,16 +340,16 @@ void main() {
       final transport = HttpClientTransport.insecureForTesting(
         client: client,
         keysUrl: Uri.parse(keysUrl),
-        gatewayUrl: Uri.parse(gatewayUrl),
-        postToGatewayTimeout: const Duration(milliseconds: 100),
+        relayUrl: Uri.parse(relayUrl),
+        postToRelayTimeout: const Duration(milliseconds: 100),
       );
 
       await expectLater(
-        transport.postToGateway(Uint8List(0)),
+        transport.postToRelay(Uint8List(0)),
         throwsA(
           isA<OhttpTimeoutException>()
               .having((e) => e.timeout, 'timeout', const Duration(milliseconds: 100))
-              .having((e) => e.url, 'url', Uri.parse(gatewayUrl)),
+              .having((e) => e.url, 'url', Uri.parse(relayUrl)),
         ),
       );
     });
@@ -364,7 +364,7 @@ void main() {
       final transport = HttpClientTransport.insecureForTesting(
         client: client,
         keysUrl: Uri.parse(keysUrl),
-        gatewayUrl: Uri.parse(gatewayUrl),
+        relayUrl: Uri.parse(relayUrl),
         fetchKeyConfigTimeout: const Duration(milliseconds: 300),
       );
 
@@ -385,7 +385,7 @@ void main() {
         final transport = HttpClientTransport.insecureForTesting(
           client: client,
           keysUrl: Uri.parse(keysUrl),
-          gatewayUrl: Uri.parse(gatewayUrl),
+          relayUrl: Uri.parse(relayUrl),
         );
 
         final result = await transport.fetchKeyConfig();
@@ -400,7 +400,7 @@ void main() {
         final transport = HttpClientTransport.insecureForTesting(
           client: client,
           keysUrl: Uri.parse(keysUrl),
-          gatewayUrl: Uri.parse(gatewayUrl),
+          relayUrl: Uri.parse(relayUrl),
         );
 
         final result = await transport.fetchKeyConfig();
@@ -418,7 +418,7 @@ void main() {
         final transport = HttpClientTransport.insecureForTesting(
           client: client,
           keysUrl: Uri.parse(keysUrl),
-          gatewayUrl: Uri.parse(gatewayUrl),
+          relayUrl: Uri.parse(relayUrl),
         );
 
         final result = await transport.fetchKeyConfig();
@@ -436,7 +436,7 @@ void main() {
         final transport = HttpClientTransport.insecureForTesting(
           client: client,
           keysUrl: Uri.parse(keysUrl),
-          gatewayUrl: Uri.parse(gatewayUrl),
+          relayUrl: Uri.parse(relayUrl),
         );
 
         final result = await transport.fetchKeyConfig();
@@ -454,7 +454,7 @@ void main() {
         final transport = HttpClientTransport.insecureForTesting(
           client: client,
           keysUrl: Uri.parse(keysUrl),
-          gatewayUrl: Uri.parse(gatewayUrl),
+          relayUrl: Uri.parse(relayUrl),
         );
 
         final result = await transport.fetchKeyConfig();
@@ -472,7 +472,7 @@ void main() {
         final transport = HttpClientTransport.insecureForTesting(
           client: client,
           keysUrl: Uri.parse(keysUrl),
-          gatewayUrl: Uri.parse(gatewayUrl),
+          relayUrl: Uri.parse(relayUrl),
         );
 
         final result = await transport.fetchKeyConfig();
@@ -490,7 +490,7 @@ void main() {
         final transport = HttpClientTransport.insecureForTesting(
           client: client,
           keysUrl: Uri.parse(keysUrl),
-          gatewayUrl: Uri.parse(gatewayUrl),
+          relayUrl: Uri.parse(relayUrl),
         );
 
         final result = await transport.fetchKeyConfig();
@@ -585,12 +585,12 @@ void main() {
 
     test('closeWith propagates close', () {
       const localKeysUrl = 'http://localhost/ohttp/config';
-      const localGatewayUrl = 'http://localhost/ohttp/gateway';
+      const localRelayUrl = 'http://localhost/ohttp/relay';
       final raw = _mockClient(localKeysUrl);
       final transport = HttpClientTransport.insecureForTesting(
         client: raw,
         keysUrl: Uri.parse(localKeysUrl),
-        gatewayUrl: Uri.parse(localGatewayUrl),
+        relayUrl: Uri.parse(localRelayUrl),
       );
       final session = OhttpSession.withTransport(transport: transport);
       final client = OhttpHttpClient(session: session, closeWith: raw);
@@ -605,7 +605,7 @@ void main() {
       final client = OhttpHttpClient.create(
         client: raw,
         keysUrl: Uri.parse(httpsKeysUrl),
-        gatewayUrl: Uri.parse(httpsGatewayUrl),
+        relayUrl: Uri.parse(httpsRelayUrl),
       );
 
       expect(raw.closeCallCount, 0);
@@ -628,10 +628,10 @@ void main() {
       final client = OhttpHttpClient.create(
         client: mockClient,
         keysUrl: Uri.parse(httpsKeysUrl),
-        gatewayUrl: Uri.parse(httpsGatewayUrl),
+        relayUrl: Uri.parse(httpsRelayUrl),
       );
 
-      // Decapsulation will fail (fake gateway response), but the key config
+      // Decapsulation will fail (fake relay response), but the key config
       // fetch proves the wiring is correct.
       await expectLater(
         client.send(Request('GET', Uri.parse('https://example.com/'))),

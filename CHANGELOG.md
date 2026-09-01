@@ -1,3 +1,25 @@
+## 0.6.0
+
+### Breaking changes
+
+- Aligned client-side terminology with RFC 9458: the endpoint the client POSTs encapsulated
+  requests to is now called the **relay** everywhere. Entities that genuinely belong to the
+  gateway (key configuration, decapsulation) keep the term "gateway".
+- Renamed `OhttpTransport.postToGateway` to `postToRelay`.
+- Renamed `HttpClientTransport` parameter `gatewayUrl` to `relayUrl` and `postToGatewayTimeout`
+  to `postToRelayTimeout` (both constructors).
+- Renamed `OhttpConstants.defaultPostToGatewayTimeout` to `defaultPostToRelayTimeout`.
+- Renamed `OhttpSession` / `OhttpHttpClient.create` parameter `retryOnGatewayError` to `retryOnRelayError`.
+- Renamed `OhttpHttpClient.create` parameters `gatewayUrl` → `relayUrl` and
+  `postToGatewayTimeout` → `postToRelayTimeout`.
+- Renamed `OhttpGatewayException` to `OhttpRelayException`.
+- Renamed observer events: `onPostToGateway` → `onPostToRelay`, `onGatewayError` → `onRelayError`,
+  `onGatewayRetry` → `onRelayRetry`.
+- Renamed `OhttpRequestStage.gatewayPost` to `relayPost`.
+- Created `OhttpGatewayException` as a distinct sibling of `OhttpRelayException`:
+  `OhttpTransport.fetchKeyConfig` / `HttpClientTransport.fetchKeyConfig()` now throw
+  `OhttpGatewayException` (instead of `OhttpRelayException`) when the gateway returns a non-2xx response to a key config request
+
 ## 0.5.0
 
 ### Breaking changes
@@ -7,6 +29,7 @@
   Custom transport implementations must return `KeyConfigFetchResult`; use `KeyConfigFetchResult(bytes: data)`
   when headers are unavailable (`maxAge` defaults to `null`).
 - Renamed `OhttpConstants.defaultKeyConfigCacheTtl` to `OhttpConstants.fallbackKeyConfigCacheTtl`. 
+
 ### Changed
 
 - `KeyConfigCache.ttl` is now nullable. When `null` (the new default), TTL is derived from the server's

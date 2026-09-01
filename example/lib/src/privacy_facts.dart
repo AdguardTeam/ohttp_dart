@@ -21,7 +21,7 @@ class PrivacyFacts {
   });
 }
 
-/// Parses the gateway target's echo JSON into [PrivacyFacts].
+/// Parses the target resource's echo JSON into [PrivacyFacts].
 ///
 /// Understands two echo shapes:
 /// - the worker's custom one (`/get`): a `headers` list of `[name, value]`
