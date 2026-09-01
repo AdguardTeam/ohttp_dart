@@ -10,7 +10,6 @@ pubspec.lock
 
 .agents/
 .claude/
-.github/
 .mcp.json
 
 .fvmrc
