@@ -5,10 +5,10 @@ Flutter example app demonstrating [Oblivious HTTP (RFC 9458)](https://www.ietf.o
 ## Architecture
 
 ```
-Flutter UI ──► OhttpSession ──► HttpClientTransport ──► OHTTP Relay
+Flutter UI ──► OhttpSession ──► HttpClientTransport ──► OHTTP Gateway / Relay
                     │                          │
-                    │                          ├─ GET /ohttp/config   (KeyConfig)
-                    │                          ├─ POST /ohttp/gateway (encrypted request)
+                    │                          ├─ GET /ohttp/config   (KeyConfig, to gateway)
+                    │                          ├─ POST /ohttp/gateway (encrypted request, to relay)
                     │                          │
                     │                   Pure Dart crypto (cryptography)
                     │                    ├─ HPKE (RFC 9180)

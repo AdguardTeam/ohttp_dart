@@ -16,7 +16,7 @@
 - Renamed observer events: `onPostToGateway` → `onPostToRelay`, `onGatewayError` → `onRelayError`,
   `onGatewayRetry` → `onRelayRetry`.
 - Renamed `OhttpRequestStage.gatewayPost` to `relayPost`.
-- Crested `OhttpGatewayException` as a distinct sibling of `OhttpRelayException`:
+- Created `OhttpGatewayException` as a distinct sibling of `OhttpRelayException`:
   `OhttpTransport.fetchKeyConfig` / `HttpClientTransport.fetchKeyConfig()` now throw
   `OhttpGatewayException` (instead of `OhttpRelayException`) when the gateway returns a non-2xx response to a key config request
 

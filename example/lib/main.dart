@@ -395,7 +395,7 @@ class _OhttpDemoPageState extends State<OhttpDemoPage>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Relay selector + key-rotation demo action
+                    // Relay selector + gateway key-rotation demo action
                     Row(
                       children: [
                         const Text(
