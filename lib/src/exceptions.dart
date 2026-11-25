@@ -93,6 +93,29 @@ class OhttpFormatException extends OhttpException {
   const OhttpFormatException(super.message, {super.stackTrace});
 }
 
+/// Thrown when an HTTP response body cannot be decoded according to its
+/// `content-encoding` header — the coding is not supported or the payload is malformed.
+class OhttpContentEncodingException extends OhttpException {
+  /// The codings from the response's `content-encoding` header, lowercased and
+  /// in wire order; unmodifiable and may contain several entries.
+  final List<String> declaredContentCodings;
+
+  /// The original decoder error, if any.
+  final Object? cause;
+
+  OhttpContentEncodingException(
+    super.message, {
+    super.stackTrace,
+    required List<String> declaredContentCodings,
+    this.cause,
+  }) : declaredContentCodings = List.unmodifiable(declaredContentCodings);
+
+  @override
+  String get baseMessage =>
+      '${super.baseMessage} (content-encoding: ${declaredContentCodings.join(', ')})'
+      '${cause != null ? ' (cause: $cause)' : ''}';
+}
+
 /// Thrown when response data exceeds configured size limits.
 class OhttpSizeLimitException extends OhttpException {
   /// The maximum allowed size in bytes.
