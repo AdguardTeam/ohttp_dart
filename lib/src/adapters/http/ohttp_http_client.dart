@@ -8,6 +8,7 @@ import 'package:ohttp_dart/src/ohttp_observer.dart';
 import 'package:ohttp_dart/src/ohttp_session.dart';
 
 import 'http_client_transport.dart';
+import 'http_header_names.dart';
 
 /// An [Client] that tunnels requests through an OHTTP relay.
 ///
@@ -23,7 +24,6 @@ import 'http_client_transport.dart';
 class OhttpHttpClient extends BaseClient {
   static const _defaultHttpPort = 80;
   static const _defaultHttpsPort = 443;
-  static const _hostHeader = 'host';
 
   final OhttpSession _session;
   final Client? _closeWith;
@@ -92,13 +92,13 @@ class OhttpHttpClient extends BaseClient {
 
       // `dart:io` injects `host` at the transport layer, which the encrypted
       // inner request never reaches. Fall back to the URL when it is missing.
-      if (name.toLowerCase() == _hostHeader) {
+      if (name.toLowerCase() == HttpHeaderNames.host) {
         hasHost = true;
       }
     });
 
     if (!hasHost) {
-      headers.add((_hostHeader, host));
+      headers.add((HttpHeaderNames.host, host));
     }
 
     final body = await request.finalize().toBytes();

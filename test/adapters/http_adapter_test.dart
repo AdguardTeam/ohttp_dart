@@ -4,6 +4,7 @@ import 'package:http/http.dart';
 import 'package:http/testing.dart';
 import 'package:ohttp_dart/http.dart';
 import 'package:ohttp_dart/ohttp_dart.dart';
+import 'package:ohttp_dart/src/adapters/http/http_header_names.dart';
 import 'package:test/test.dart';
 
 import '../test_utils.dart';
@@ -206,7 +207,7 @@ void main() {
     test('postToRelay sends Content-Type message/ohttp-req', () async {
       final body = Uint8List.fromList([1, 2, 3]);
       final client = MockClient((request) async {
-        expect(request.headers['content-type'], 'message/ohttp-req');
+        expect(request.headers[HttpHeaderNames.contentType], 'message/ohttp-req');
         expect(request.bodyBytes, body);
 
         return Response.bytes(Uint8List(4), 200);
@@ -379,7 +380,7 @@ void main() {
           (request) async => Response.bytes(
             validKeyConfig(),
             200,
-            headers: {'cache-control': 'public, max-age=300'},
+            headers: {HttpHeaderNames.cacheControl: 'public, max-age=300'},
           ),
         );
         final transport = HttpClientTransport.insecureForTesting(
@@ -412,7 +413,7 @@ void main() {
           (request) async => Response.bytes(
             validKeyConfig(),
             200,
-            headers: {'cache-control': 'max-age=abc'},
+            headers: {HttpHeaderNames.cacheControl: 'max-age=abc'},
           ),
         );
         final transport = HttpClientTransport.insecureForTesting(
@@ -430,7 +431,7 @@ void main() {
           (request) async => Response.bytes(
             validKeyConfig(),
             200,
-            headers: {'cache-control': 'max-age=0'},
+            headers: {HttpHeaderNames.cacheControl: 'max-age=0'},
           ),
         );
         final transport = HttpClientTransport.insecureForTesting(
@@ -448,7 +449,7 @@ void main() {
           (request) async => Response.bytes(
             validKeyConfig(),
             200,
-            headers: {'cache-control': 'no-cache'},
+            headers: {HttpHeaderNames.cacheControl: 'no-cache'},
           ),
         );
         final transport = HttpClientTransport.insecureForTesting(
@@ -466,7 +467,7 @@ void main() {
           (request) async => Response.bytes(
             validKeyConfig(),
             200,
-            headers: {'cache-control': 'no-store'},
+            headers: {HttpHeaderNames.cacheControl: 'no-store'},
           ),
         );
         final transport = HttpClientTransport.insecureForTesting(
@@ -484,7 +485,7 @@ void main() {
           (request) async => Response.bytes(
             validKeyConfig(),
             200,
-            headers: {'cache-control': 'max-age=300, no-cache'},
+            headers: {HttpHeaderNames.cacheControl: 'max-age=300, no-cache'},
           ),
         );
         final transport = HttpClientTransport.insecureForTesting(
@@ -530,7 +531,7 @@ void main() {
 
       await client.send(request);
 
-      final hostHeader = session.lastRequest!.headers.where((h) => h.$1 == 'host').firstOrNull;
+      final hostHeader = session.lastRequest!.headers.where((h) => h.$1 == HttpHeaderNames.host).firstOrNull;
       expect(hostHeader, isNotNull);
       expect(hostHeader!.$2, 'example.com');
     });
@@ -539,11 +540,11 @@ void main() {
       final session = _FakeSession();
       final client = OhttpHttpClient(session: session);
       final request = Request('GET', Uri.parse('https://example.com/'));
-      request.headers['host'] = 'custom-host';
+      request.headers[HttpHeaderNames.host] = 'custom-host';
 
       await client.send(request);
 
-      final hostHeader = session.lastRequest!.headers.where((h) => h.$1 == 'host').firstOrNull;
+      final hostHeader = session.lastRequest!.headers.where((h) => h.$1 == HttpHeaderNames.host).firstOrNull;
       expect(hostHeader!.$2, 'custom-host');
     });
 
@@ -555,7 +556,7 @@ void main() {
       await client.send(request);
 
       expect(session.lastRequest!.authority, 'example.com');
-      final hostHeader = session.lastRequest!.headers.where((h) => h.$1 == 'host').firstOrNull;
+      final hostHeader = session.lastRequest!.headers.where((h) => h.$1 == HttpHeaderNames.host).firstOrNull;
       expect(hostHeader!.$2, 'example.com');
     });
 
@@ -567,7 +568,7 @@ void main() {
       await client.send(request);
 
       expect(session.lastRequest!.authority, 'example.com');
-      final hostHeader = session.lastRequest!.headers.where((h) => h.$1 == 'host').firstOrNull;
+      final hostHeader = session.lastRequest!.headers.where((h) => h.$1 == HttpHeaderNames.host).firstOrNull;
       expect(hostHeader!.$2, 'example.com');
     });
 
@@ -579,7 +580,7 @@ void main() {
       await client.send(request);
 
       expect(session.lastRequest!.authority, 'example.com:8443');
-      final hostHeader = session.lastRequest!.headers.where((h) => h.$1 == 'host').firstOrNull;
+      final hostHeader = session.lastRequest!.headers.where((h) => h.$1 == HttpHeaderNames.host).firstOrNull;
       expect(hostHeader!.$2, 'example.com:8443');
     });
 

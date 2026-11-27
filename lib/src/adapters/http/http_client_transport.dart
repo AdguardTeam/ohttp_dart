@@ -8,6 +8,8 @@ import 'package:ohttp_dart/src/exceptions.dart';
 import 'package:ohttp_dart/src/ohttp_constants.dart';
 import 'package:ohttp_dart/src/ohttp_transport.dart';
 
+import 'http_header_names.dart';
+
 /// An [OhttpTransport] that delegates HTTP calls to an injected [http.Client].
 ///
 /// [fetchKeyConfig] issues a GET to [_keysUrl]; [postToRelay] issues a
@@ -17,7 +19,6 @@ import 'package:ohttp_dart/src/ohttp_transport.dart';
 /// caller retains ownership of the [http.Client].
 class HttpClientTransport implements OhttpTransport {
   static const _ohttpMediaType = 'message/ohttp-req';
-  static const _cacheControlHeader = 'cache-control';
 
   // Matches max-age=N (RFC 9111 §5.2.2.1).
   static final _maxAgePattern = RegExp(r'\bmax-age\s*=\s*(\d+)', caseSensitive: false);
@@ -48,7 +49,7 @@ class HttpClientTransport implements OhttpTransport {
   }
 
   static Duration? _parseMaxAge(Map<String, String> headers) {
-    final cacheControl = headers[_cacheControlHeader];
+    final cacheControl = headers[HttpHeaderNames.cacheControl];
     if (cacheControl == null) {
       return null;
     }
@@ -173,7 +174,7 @@ class HttpClientTransport implements OhttpTransport {
           .post(
             _relayUrl,
             headers: {
-              'content-type': _ohttpMediaType,
+              HttpHeaderNames.contentType: _ohttpMediaType,
             },
             body: body,
           )
